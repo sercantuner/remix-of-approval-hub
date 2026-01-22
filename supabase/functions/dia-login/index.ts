@@ -85,12 +85,29 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
       },
       body: JSON.stringify(diaLoginPayload),
     });
 
-    const diaResult = await diaResponse.json();
-    console.log("[dia-login] DIA response:", JSON.stringify(diaResult));
+    const responseText = await diaResponse.text();
+    console.log("[dia-login] DIA response status:", diaResponse.status);
+    console.log("[dia-login] DIA response text:", responseText.substring(0, 500));
+
+    // Check if response is JSON
+    if (!diaResponse.ok || !responseText.startsWith("{")) {
+      console.error("[dia-login] DIA returned non-JSON response");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `DIA sunucusu yanıt vermiyor veya hatalı. Status: ${diaResponse.status}. Sunucu adını kontrol edin.` 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const diaResult = JSON.parse(responseText);
+    console.log("[dia-login] DIA parsed response:", JSON.stringify(diaResult));
 
     // Check for successful login
     if (diaResult.login?.session_id) {
