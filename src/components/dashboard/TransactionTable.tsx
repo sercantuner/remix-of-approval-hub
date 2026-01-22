@@ -134,12 +134,13 @@ export function TransactionTable({
             {transactions.map((transaction) => (
               <tr
                 key={transaction.id}
+                onClick={() => onViewDetails(transaction)}
                 className={cn(
-                  'hover:bg-muted/30 transition-colors',
+                  'hover:bg-muted/30 transition-colors cursor-pointer',
                   selectedIds.includes(transaction.id) && 'bg-primary/5'
                 )}
               >
-                <td className="p-4">
+                <td className="p-4" onClick={(e) => e.stopPropagation()}>
                   <Checkbox
                     checked={selectedIds.includes(transaction.id)}
                     onCheckedChange={() => toggleOne(transaction.id)}
@@ -193,7 +194,7 @@ export function TransactionTable({
                 <td className="p-4 text-center">
                   {getStatusBadge(transaction.status)}
                 </td>
-                <td className="p-4">
+                <td className="p-4" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-2">
                     <ApprovalSlider
                       size="sm"
