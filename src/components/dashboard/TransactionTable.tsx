@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { 
   Check, 
   X, 
-  Eye, 
   FileText,
   Receipt,
-  ExternalLink
+  ChevronDown,
+  ChevronUp,
+  Loader2
 } from 'lucide-react';
 import { Transaction, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ApprovalSlider } from '@/components/ui/ApprovalSlider';
+import { TransactionDetailRow } from './TransactionDetailRow';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -31,6 +33,8 @@ export function TransactionTable({
   selectedIds,
   onSelectionChange,
 }: TransactionTableProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  
   const allSelected = transactions.length > 0 && selectedIds.length === transactions.length;
   const someSelected = selectedIds.length > 0 && selectedIds.length < transactions.length;
 
@@ -48,6 +52,10 @@ export function TransactionTable({
     } else {
       onSelectionChange([...selectedIds, id]);
     }
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedId(expandedId === id ? null : id);
   };
 
   const getStatusBadge = (status: Transaction['status']) => {
@@ -107,6 +115,7 @@ export function TransactionTable({
                   className={someSelected ? 'data-[state=checked]:bg-primary' : ''}
                 />
               </th>
+              <th className="p-4 text-left w-10"></th>
               <th className="p-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Belge No
               </th>
@@ -131,33 +140,52 @@ export function TransactionTable({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {transactions.map((transaction) => (
-              <tr
-                key={transaction.id}
-                onClick={() => onViewDetails(transaction)}
-                className={cn(
-                  'hover:bg-muted/30 transition-colors cursor-pointer',
-                  selectedIds.includes(transaction.id) && 'bg-primary/5'
-                )}
-              >
-                <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={selectedIds.includes(transaction.id)}
-                    onCheckedChange={() => toggleOne(transaction.id)}
-                  />
-                </td>
-                <td className="p-4">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-mono text-sm">{transaction.documentNo}</span>
-                    {/* E-fatura ikonu - linki varsa göster */}
-                    {(() => {
-                      const rawData = transaction.details as Record<string, unknown> | undefined;
-                      const efaturaLink = rawData?.efaturalinki as string | undefined;
-                      const earsivLink = rawData?.earsivlinki as string | undefined;
-                      const hasLink = efaturaLink || earsivLink;
-                      if (hasLink) {
-                        return (
+            {transactions.map((transaction) => {
+              const isExpanded = expandedId === transaction.id;
+              const rawData = transaction.details as Record<string, unknown> | undefined;
+              const efaturaLink = rawData?.efaturalinki as string | undefined;
+              const earsivLink = rawData?.earsivlinki as string | undefined;
+              const hasLink = efaturaLink || earsivLink;
+
+              return (
+                <>
+                  <tr
+                    key={transaction.id}
+                    onClick={() => toggleExpand(transaction.id)}
+                    className={cn(
+                      'hover:bg-muted/30 transition-colors cursor-pointer',
+                      selectedIds.includes(transaction.id) && 'bg-primary/5',
+                      isExpanded && 'bg-muted/50'
+                    )}
+                  >
+                    <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.includes(transaction.id)}
+                        onCheckedChange={() => toggleOne(transaction.id)}
+                      />
+                    </td>
+                    <td className="p-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpand(transaction.id);
+                        }}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-mono text-sm">{transaction.documentNo}</span>
+                        {hasLink && (
                           <a
                             href={(efaturaLink || earsivLink) as string}
                             target="_blank"
@@ -168,46 +196,56 @@ export function TransactionTable({
                           >
                             <Receipt className="w-4 h-4" />
                           </a>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                </td>
-                <td className="p-4">
-                  <p className="text-sm font-medium line-clamp-1">{transaction.description}</p>
-                </td>
-                <td className="p-4">
-                  <p className="text-sm text-muted-foreground">{transaction.counterparty}</p>
-                </td>
-                <td className="p-4">
-                  <p className="text-sm text-muted-foreground">{formatDate(transaction.date)}</p>
-                </td>
-                <td className="p-4 text-right">
-                  <span className={cn(
-                    'font-semibold tabular-nums',
-                    transaction.amount >= 0 ? 'text-success' : 'text-destructive'
-                  )}>
-                    {formatCurrency(transaction.amount)}
-                  </span>
-                </td>
-                <td className="p-4 text-center">
-                  {getStatusBadge(transaction.status)}
-                </td>
-                <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center justify-center gap-2">
-                    <ApprovalSlider
-                      size="sm"
-                      onApprove={() => onApprove([transaction.id])}
-                      onReject={() => onReject([transaction.id])}
-                      onAnalyze={() => onViewDetails(transaction)}
-                      disabled={false}
-                      currentStatus={transaction.status}
-                    />
-                  </div>
-                </td>
-              </tr>
-            ))}
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <p className="text-sm font-medium line-clamp-1">{transaction.description}</p>
+                    </td>
+                    <td className="p-4">
+                      <p className="text-sm text-muted-foreground">{transaction.counterparty}</p>
+                    </td>
+                    <td className="p-4">
+                      <p className="text-sm text-muted-foreground">{formatDate(transaction.date)}</p>
+                    </td>
+                    <td className="p-4 text-right">
+                      <span className={cn(
+                        'font-semibold tabular-nums',
+                        transaction.amount >= 0 ? 'text-success' : 'text-destructive'
+                      )}>
+                        {formatCurrency(transaction.amount)}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      {getStatusBadge(transaction.status)}
+                    </td>
+                    <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-2">
+                        <ApprovalSlider
+                          size="sm"
+                          onApprove={() => onApprove([transaction.id])}
+                          onReject={() => onReject([transaction.id])}
+                          onAnalyze={() => toggleExpand(transaction.id)}
+                          disabled={false}
+                          currentStatus={transaction.status}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr key={`${transaction.id}-detail`}>
+                      <td colSpan={9} className="p-0">
+                        <TransactionDetailRow 
+                          transaction={transaction} 
+                          onApprove={() => onApprove([transaction.id])}
+                          onReject={() => onReject([transaction.id])}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
           </tbody>
         </table>
       </div>
