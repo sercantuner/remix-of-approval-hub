@@ -379,33 +379,15 @@ export function TransactionDetailRow({
 
       {!isLoading && !error && detailData && (
         <div className="space-y-4">
-          {/* Header with type and actions */}
+          {/* Header with actions only - removed redundant title/docNo/currency */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <FileText className="w-4 h-4 text-primary" />
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium">{TRANSACTION_TYPE_LABELS[transaction.type]}</span>
-                <span className="text-sm text-muted-foreground">#{transaction.documentNo}</span>
-                {/* Currency Badge */}
-                <Badge variant="outline" className="ml-1 text-xs">
-                  {currency}
-                </Badge>
-                {/* Exchange Rate */}
-                {detailData?.dovizkuru && parseFloat(String(detailData.dovizkuru)) !== 1 && (
-                  <span className="text-xs text-muted-foreground">
-                    Kur: {formatExchangeRate(parseFloat(String(detailData.dovizkuru)))}
-                  </span>
-                )}
-                {/* Recording User */}
-                {userName && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <User className="w-3 h-3" />
-                    {userName}
-                  </span>
-                )}
-              </div>
+              {/* Exchange Rate - only show if different from 1 */}
+              {detailData?.dovizkuru && parseFloat(String(detailData.dovizkuru)) !== 1 && (
+                <span className="text-xs text-muted-foreground">
+                  Kur: {formatExchangeRate(parseFloat(String(detailData.dovizkuru)))}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {(efaturaLink || earsivLink) && (
