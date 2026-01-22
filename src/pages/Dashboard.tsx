@@ -158,11 +158,19 @@ export default function Dashboard() {
     if (error) {
       console.error("Error loading transactions:", error);
     } else if (data) {
-      const mapped: Transaction[] = data.map((t) => {
+      // NOTE: Bank slips can arrive as multiple movements with the same Belge No.
+      // We group them into a single UI row (and apply actions to all underlying rows).
+      const bankGroups = new Map<string, Transaction>();
+      const others: Transaction[] = [];
+
+      for (const t of data) {
         const rawData = t.dia_raw_data as Record<string, unknown> | null;
-        return {
+        const type = t.transaction_type as TransactionType;
+        const status = (t.status as Transaction["status"]) || "pending";
+
+        const baseTx: Transaction = {
           id: t.id,
-          type: t.transaction_type as TransactionType,
+          type,
           description: t.description || "",
           amount: Number(t.amount),
           currency: t.currency || "TRY",
@@ -170,16 +178,64 @@ export default function Dashboard() {
           date: t.transaction_date,
           documentNo: t.document_no,
           counterparty: t.counterparty || "",
-          status: t.status as Transaction["status"],
+          status,
           diaRecordId: t.dia_record_id,
           attachmentUrl: t.attachment_url,
-          details: rawData,
+          details: rawData || undefined,
         };
-      });
+
+        if (type === "bank") {
+          const groupKey = `bank:${baseTx.documentNo}:${baseTx.date}:${status}`;
+          const existing = bankGroups.get(groupKey);
+
+          if (!existing) {
+            bankGroups.set(groupKey, {
+              ...baseTx,
+              // UI id (not a DB id)
+              id: groupKey,
+              sourceTransactionIds: [t.id],
+              movementCount: 1,
+            });
+          } else {
+            existing.sourceTransactionIds = [...(existing.sourceTransactionIds || []), t.id];
+            existing.movementCount = (existing.movementCount || 1) + 1;
+            existing.amount = Number(existing.amount) + Number(baseTx.amount);
+
+            // Prefer keeping first non-empty info
+            if (!existing.counterparty && baseTx.counterparty) existing.counterparty = baseTx.counterparty;
+            if (!existing.description && baseTx.description) existing.description = baseTx.description;
+            if (!existing.attachmentUrl && baseTx.attachmentUrl) existing.attachmentUrl = baseTx.attachmentUrl;
+            if ((existing.exchangeRate === 1 || !existing.exchangeRate) && baseTx.exchangeRate && baseTx.exchangeRate !== 1) {
+              existing.exchangeRate = baseTx.exchangeRate;
+            }
+          }
+        } else {
+          others.push(baseTx);
+        }
+      }
+
+      const mapped: Transaction[] = [...others, ...Array.from(bankGroups.values())].sort((a, b) =>
+        b.date.localeCompare(a.date)
+      );
+
       setTransactions(mapped);
     }
 
     setIsLoading(false);
+  };
+
+  // Resolve UI ids (grouped bank slips) to underlying DB row ids for backend actions
+  const resolveActionIds = (displayIds: string[]) => {
+    const idSet = new Set<string>();
+    for (const id of displayIds) {
+      const tx = transactions.find(t => t.id === id);
+      if (tx?.sourceTransactionIds?.length) {
+        tx.sourceTransactionIds.forEach(sourceId => idSet.add(sourceId));
+      } else {
+        idSet.add(id);
+      }
+    }
+    return Array.from(idSet);
   };
 
   const pendingTransactions = useMemo(
@@ -244,7 +300,7 @@ export default function Dashboard() {
 
   const handleApprove = async (ids: string[]) => {
     try {
-      await diaApprove(ids, "approve");
+      await diaApprove(resolveActionIds(ids), "approve");
       // Update local state immediately without removing from list
       setTransactions(prev => 
         prev.map(t => ids.includes(t.id) ? { ...t, status: "approved" as const } : t)
@@ -273,7 +329,7 @@ export default function Dashboard() {
   const handleRejectConfirm = async (reason: string) => {
     const ids = rejectDialogState.transactionIds;
     try {
-      await diaApprove(ids, "reject", reason);
+      await diaApprove(resolveActionIds(ids), "reject", reason);
       // Update local state immediately without removing from list
       setTransactions(prev => 
         prev.map(t => ids.includes(t.id) ? { ...t, status: "rejected" as const } : t)

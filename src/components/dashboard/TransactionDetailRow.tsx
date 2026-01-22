@@ -295,27 +295,34 @@ export function TransactionDetailRow({
 
   useEffect(() => {
     if (transaction?.diaRecordId) {
-      // For bank transactions, use list data directly (no need to fetch detail)
+      // Bank: if grouped (multiple movements), fetch detail (getir). If single, show list-data only.
       if (transaction.type === 'bank') {
-        console.log('[TransactionDetailRow] Bank transaction, using list data directly');
-        const listData = transaction.details as Record<string, unknown> | undefined;
-        if (listData) {
-          // Create a m_kalemler array from list data for display
-          const syntheticDetail: Record<string, unknown> = {
-            ...listData,
-            m_kalemler: [{
-              _key_scf_cari: { unvan: listData.cariunvan || listData.__carifirma || listData.aciklama || '-' },
-              _key_bcs_bankahesabi: { hesapadi: listData.bankahesabi || listData.hesapadi || '-' },
-              borc: listData.borc || '0',
-              alacak: listData.alacak || '0',
-              _key_sis_doviz: { adi: listData.dovizturu || 'TL' },
-              dovizkuru: listData.dovizkuru || '1',
-            }],
-          };
-          setDetailData(syntheticDetail);
+        const movementCount = transaction.movementCount || transaction.sourceTransactionIds?.length || 1;
+
+        // Single movement: show list data directly (no need to fetch detail)
+        if (movementCount <= 1) {
+          console.log('[TransactionDetailRow] Bank transaction (single movement), using list data');
+          const listData = transaction.details as Record<string, unknown> | undefined;
+          if (listData) {
+            const syntheticDetail: Record<string, unknown> = {
+              ...listData,
+              m_kalemler: [{
+                _key_scf_cari: { unvan: listData.cariunvan || listData.__carifirma || listData.aciklama || '-' },
+                _key_bcs_bankahesabi: { hesapadi: listData.bankahesabi || listData.hesapadi || '-' },
+                borc: listData.borc || '0',
+                alacak: listData.alacak || '0',
+                _key_sis_doviz: { adi: listData.dovizturu || 'TL' },
+                dovizkuru: listData.dovizkuru || '1',
+              }],
+            };
+            setDetailData(syntheticDetail);
+          }
+          setIsLoading(false);
+          return;
         }
-        setIsLoading(false);
-        return;
+
+        // Multi movement: fetch detail using the record key from diaRecordId
+        console.log('[TransactionDetailRow] Bank transaction (multi movement), fetching detail');
       }
 
       setIsLoading(true);

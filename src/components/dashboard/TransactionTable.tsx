@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { 
   Check, 
   X, 
@@ -179,10 +179,14 @@ export function TransactionTable({
               const earsivLink = rawData?.earsivlinki as string | undefined;
               const hasLink = efaturaLink || earsivLink;
 
+              const movementCount = transaction.movementCount || transaction.sourceTransactionIds?.length || 1;
+              const bankMovementLabel = transaction.type === 'bank' && movementCount > 1
+                ? `${movementCount} hareket`
+                : null;
+
               return (
-                <>
+                <Fragment key={transaction.id}>
                     <tr
-                    key={transaction.id}
                     onClick={() => toggleExpand(transaction.id)}
                     className={cn(
                       'hover:bg-muted/30 transition-colors cursor-pointer',
@@ -229,6 +233,9 @@ export function TransactionTable({
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-muted-foreground" />
                         <span className="font-mono text-sm">{transaction.documentNo}</span>
+                        {bankMovementLabel && (
+                          <span className="text-xs text-muted-foreground">({bankMovementLabel})</span>
+                        )}
                         {hasLink && (
                           <a
                             href={(efaturaLink || earsivLink) as string}
@@ -337,7 +344,7 @@ export function TransactionTable({
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
