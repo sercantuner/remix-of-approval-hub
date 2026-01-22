@@ -411,8 +411,28 @@ Deno.serve(async (req) => {
           console.log(JSON.stringify(detailResult.result.m_altlar).substring(0, 3000));
         }
         
-        // Log user ID
+        // Log user ID and turu field
         console.log(`[dia-api] _user: ${detailResult.result._user}, _owner: ${detailResult.result._owner}`);
+        console.log(`[dia-api] turu: ${detailResult.result.turu}, turuack: ${detailResult.result.turuack}, turutxt: ${detailResult.result.turutxt}`);
+        
+        // Log _key_scf_fatura_turu if exists for transaction type description
+        if (detailResult.result._key_scf_fatura_turu) {
+          console.log(`[dia-api] _key_scf_fatura_turu: ${JSON.stringify(detailResult.result._key_scf_fatura_turu)}`);
+        }
+        // Log _key_sis_islem_turu if exists
+        if (detailResult.result._key_sis_islem_turu) {
+          console.log(`[dia-api] _key_sis_islem_turu: ${JSON.stringify(detailResult.result._key_sis_islem_turu)}`);
+        }
+        // Log any field containing "turu" or "tip" in the key
+        const turuFields = Object.keys(detailResult.result).filter(k => 
+          (k.toLowerCase().includes('turu') || k.toLowerCase().includes('tip')) && 
+          !k.startsWith('_key_') && 
+          detailResult.result[k] !== null && 
+          detailResult.result[k] !== undefined
+        );
+        if (turuFields.length > 0) {
+          console.log(`[dia-api] Turu/Tip fields: ${turuFields.map(k => `${k}=${detailResult.result[k]}`).join(', ')}`);
+        }
       }
       // ========== END FULL DATA LOGGING ==========
       

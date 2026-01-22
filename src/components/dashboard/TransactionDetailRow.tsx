@@ -149,26 +149,17 @@ function flattenLineItem(item: Record<string, unknown>, transactionType: string)
   const stokKart = item._key_stk_stokkart as Record<string, unknown> | undefined;
   const stokAdi = stokKart?.adi || stokKart?.kodu || item.stokadi || item.stok_adi || null;
   
-  // For orders: use turuack or stock name
-  // For invoices: use turutxt or stock name
+  // Get description from _key_kalemturu.aciklama (primary source for invoices and orders)
+  const kalemTuru = item._key_kalemturu as Record<string, unknown> | undefined;
+  const kalemTuruAciklama = kalemTuru?.aciklama || null;
+  
+  // Priority: _key_kalemturu.aciklama > turutxt/turuack > stock name > item.aciklama
   if (transactionType === 'order') {
-    // Use turuack for order type, fallback to stock name
-    flat.aciklama = item.turuack || stokAdi || item.aciklama || '-';
+    flat.aciklama = kalemTuruAciklama || item.turuack || stokAdi || item.aciklama || '-';
   } else if (transactionType === 'invoice') {
-    // Use turutxt for invoice type, fallback to stock name
-    flat.aciklama = item.turutxt || stokAdi || item.aciklama || '-';
+    flat.aciklama = kalemTuruAciklama || item.turutxt || stokAdi || item.aciklama || '-';
   } else {
-    // _key_kalemturu.aciklama -> aciklama
-    if (item._key_kalemturu && typeof item._key_kalemturu === 'object') {
-      const kalemTuru = item._key_kalemturu as Record<string, unknown>;
-      if (kalemTuru.aciklama) {
-        flat.aciklama = kalemTuru.aciklama;
-      }
-    }
-    // Fallback to stock name
-    if (!flat.aciklama || flat.aciklama === '-') {
-      flat.aciklama = stokAdi || item.aciklama || '-';
-    }
+    flat.aciklama = kalemTuruAciklama || stokAdi || item.aciklama || '-';
   }
   
   // _key_scf_kalem_birimleri -> birim (array format: [[id, name], ...])
