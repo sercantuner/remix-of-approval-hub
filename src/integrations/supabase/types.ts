@@ -52,6 +52,99 @@ export type Database = {
           },
         ]
       }
+      mail_settings: {
+        Row: {
+          created_at: string
+          id: string
+          is_verified: boolean | null
+          sender_email: string
+          sender_name: string | null
+          smtp_host: string
+          smtp_password: string
+          smtp_port: number
+          smtp_secure: boolean
+          smtp_user: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_verified?: boolean | null
+          sender_email: string
+          sender_name?: string | null
+          smtp_host: string
+          smtp_password: string
+          smtp_port?: number
+          smtp_secure?: boolean
+          smtp_user: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_verified?: boolean | null
+          sender_email?: string
+          sender_name?: string | null
+          smtp_host?: string
+          smtp_password?: string
+          smtp_port?: number
+          smtp_secure?: boolean
+          smtp_user?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_settings: {
+        Row: {
+          bank_emails: string[] | null
+          cash_emails: string[] | null
+          check_note_emails: string[] | null
+          created_at: string
+          current_account_emails: string[] | null
+          id: string
+          invoice_emails: string[] | null
+          is_enabled: boolean
+          last_notification_sent: string | null
+          notification_hour: number
+          order_emails: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bank_emails?: string[] | null
+          cash_emails?: string[] | null
+          check_note_emails?: string[] | null
+          created_at?: string
+          current_account_emails?: string[] | null
+          id?: string
+          invoice_emails?: string[] | null
+          is_enabled?: boolean
+          last_notification_sent?: string | null
+          notification_hour?: number
+          order_emails?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bank_emails?: string[] | null
+          cash_emails?: string[] | null
+          check_note_emails?: string[] | null
+          created_at?: string
+          current_account_emails?: string[] | null
+          id?: string
+          invoice_emails?: string[] | null
+          is_enabled?: boolean
+          last_notification_sent?: string | null
+          notification_hour?: number
+          order_emails?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pending_transactions: {
         Row: {
           amount: number
