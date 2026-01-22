@@ -10,7 +10,7 @@ interface DiaLoginParams {
 }
 
 interface DiaApiParams {
-  action: "list" | "create" | "update" | "delete" | "approve" | "reject";
+  action: "list" | "list_detail" | "create" | "update" | "delete" | "approve" | "reject";
   module: string;
   filters?: Array<{ field: string; operator: string; value: string }>;
   sorts?: Array<{ field: string; sorttype: "ASC" | "DESC" }>;
@@ -18,6 +18,7 @@ interface DiaApiParams {
   offset?: number;
   data?: Record<string, unknown>;
   recordKey?: string;
+  transactionType?: string;
 }
 
 export async function diaLogin(params: DiaLoginParams) {
@@ -79,6 +80,28 @@ export async function diaApprove(transactionIds: string[], action: "approve" | "
 
   const response = await supabase.functions.invoke("dia-approve", {
     body: { transactionIds, action, reason },
+  });
+
+  if (response.error) {
+    throw new Error(response.error.message);
+  }
+
+  return response.data;
+}
+
+export async function diaFetchDetail(transactionType: string, recordKey: string) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    throw new Error("Not authenticated");
+  }
+
+  const response = await supabase.functions.invoke("dia-api", {
+    body: {
+      action: "list_detail",
+      module: "", // Not used for list_detail
+      transactionType,
+      recordKey,
+    },
   });
 
   if (response.error) {
