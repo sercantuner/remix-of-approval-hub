@@ -295,6 +295,29 @@ export function TransactionDetailRow({
 
   useEffect(() => {
     if (transaction?.diaRecordId) {
+      // For bank transactions, use list data directly (no need to fetch detail)
+      if (transaction.type === 'bank') {
+        console.log('[TransactionDetailRow] Bank transaction, using list data directly');
+        const listData = transaction.details as Record<string, unknown> | undefined;
+        if (listData) {
+          // Create a m_kalemler array from list data for display
+          const syntheticDetail: Record<string, unknown> = {
+            ...listData,
+            m_kalemler: [{
+              _key_scf_cari: { unvan: listData.cariunvan || listData.__carifirma || listData.aciklama || '-' },
+              _key_bcs_bankahesabi: { hesapadi: listData.bankahesabi || listData.hesapadi || '-' },
+              borc: listData.borc || '0',
+              alacak: listData.alacak || '0',
+              _key_sis_doviz: { adi: listData.dovizturu || 'TL' },
+              dovizkuru: listData.dovizkuru || '1',
+            }],
+          };
+          setDetailData(syntheticDetail);
+        }
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
