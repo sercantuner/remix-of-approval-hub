@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface DiaApiRequest {
-  action: "list" | "create" | "update" | "delete" | "approve" | "reject";
+  action: "list" | "list_detail" | "create" | "update" | "delete" | "approve" | "reject";
   module: string; // e.g., "scf_fatura", "scf_carihesap_fisi", "bcs_bankahesap_fisi"
   filters?: Array<{ field: string; operator: string; value: string }>;
   sorts?: Array<{ field: string; sorttype: "ASC" | "DESC" }>;
@@ -14,6 +14,7 @@ interface DiaApiRequest {
   offset?: number;
   data?: Record<string, unknown>;
   recordKey?: string;
+  transactionType?: string; // For list_detail action
 }
 
 interface DiaSession {
@@ -38,6 +39,33 @@ const operatorMap: Record<string, string> = {
   less_equal: "<=",
   is_null: "NULL",
   is_not_null: "!NULL",
+};
+
+// Detail method mapping for each transaction type
+interface DetailMethodConfig {
+  method: string;
+  endpoint: string;
+  params?: Record<string, unknown>;
+}
+
+const DETAIL_METHOD_MAPPING: Record<string, DetailMethodConfig> = {
+  order: { method: "scf_siparis_listele_ayrintili", endpoint: "scf" },
+  invoice: { method: "scf_fatura_listele_ayrintili", endpoint: "scf" },
+  bank: { method: "bcs_banka_fisi_listele", endpoint: "bcs" },
+  current_account: { method: "scf_carihesap_fisi_listele", endpoint: "scf" },
+  cash: { 
+    method: "scf_kasakart_hareket_listele", 
+    endpoint: "scf",
+    params: { 
+      cari: "True", 
+      banka: "False", 
+      kasa: "False", 
+      otel: "False", 
+      fatura: "False", 
+      ceksenet: "False" 
+    }
+  },
+  check_note: { method: "bcs_ceksenet_listele", endpoint: "bcs" }
 };
 
 async function getValidSession(supabase: any, userId: string): Promise<DiaSession | null> {
@@ -227,6 +255,57 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "No valid DIA session. Please login to DIA first." }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Handle list_detail action separately
+    if (request.action === "list_detail") {
+      const transactionType = request.transactionType;
+      const recordKey = request.recordKey;
+
+      if (!transactionType || !recordKey) {
+        return new Response(
+          JSON.stringify({ error: "transactionType and recordKey are required for list_detail" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const detailConfig = DETAIL_METHOD_MAPPING[transactionType];
+      if (!detailConfig) {
+        return new Response(
+          JSON.stringify({ error: `Unknown transaction type: ${transactionType}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const diaDetailUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/${detailConfig.endpoint}/json`;
+      
+      // Build detail payload with _key filter
+      const detailPayload = {
+        [detailConfig.method]: {
+          session_id: session.session_id,
+          firma_kodu: session.firma_kodu,
+          donem_kodu: session.donem_kodu,
+          filters: [{ field: "_key", operator: "", value: recordKey }],
+          sorts: "",
+          params: detailConfig.params || "",
+          limit: 1,
+          offset: 0,
+        },
+      };
+
+      console.log(`[dia-api] Fetching detail from ${diaDetailUrl} for ${transactionType}, key: ${recordKey}`);
+
+      const detailResponse = await fetch(diaDetailUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(detailPayload),
+      });
+
+      const detailResult = await detailResponse.json();
+      
+      return new Response(JSON.stringify(detailResult), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Determine the correct API endpoint based on module - Using DIA API v3
