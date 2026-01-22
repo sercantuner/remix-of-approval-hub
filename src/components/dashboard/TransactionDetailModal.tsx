@@ -5,7 +5,8 @@ import {
   Hash, 
   DollarSign,
   Check,
-  X
+  X,
+  ExternalLink
 } from 'lucide-react';
 import { Transaction, TRANSACTION_TYPE_LABELS, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -36,6 +37,11 @@ export function TransactionDetailModal({
   onReject,
 }: TransactionDetailModalProps) {
   if (!transaction) return null;
+
+  // Extract e-fatura and e-arsiv links from raw data
+  const rawData = transaction.details as Record<string, unknown> | undefined;
+  const efaturaLink = rawData?.efatura_link as string | undefined || rawData?.efatura as string | undefined;
+  const earsivLink = rawData?.earsiv_link as string | undefined || rawData?.["e-arsiv_link"] as string | undefined || rawData?.earsiv as string | undefined;
 
   const detailItems = [
     { label: 'Belge Türü', value: TRANSACTION_TYPE_LABELS[transaction.type], icon: FileText },
@@ -101,21 +107,31 @@ export function TransactionDetailModal({
             <p className="text-sm">{transaction.description}</p>
           </div>
 
-          {/* Document Preview Placeholder */}
-          {transaction.attachmentUrl && (
+          {/* E-Fatura / E-Arşiv Links */}
+          {(efaturaLink || earsivLink) && (
             <>
               <Separator />
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Belge Önizleme</p>
-                <div className="bg-muted rounded-lg h-48 flex items-center justify-center border border-dashed">
-                  <div className="text-center">
-                    <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={transaction.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                        Belgeyi Görüntüle
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">Fatura Belgeleri</p>
+                <div className="flex flex-wrap gap-3">
+                  {efaturaLink && (
+                    <Button variant="outline" size="sm" asChild className="gap-2">
+                      <a href={efaturaLink} target="_blank" rel="noopener noreferrer">
+                        <FileText className="w-4 h-4" />
+                        E-Fatura Görüntüle
+                        <ExternalLink className="w-3 h-3" />
                       </a>
                     </Button>
-                  </div>
+                  )}
+                  {earsivLink && (
+                    <Button variant="outline" size="sm" asChild className="gap-2">
+                      <a href={earsivLink} target="_blank" rel="noopener noreferrer">
+                        <FileText className="w-4 h-4" />
+                        E-Arşiv Görüntüle
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </Button>
+                  )}
                 </div>
               </div>
             </>
