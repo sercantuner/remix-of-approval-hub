@@ -247,13 +247,15 @@ export function TransactionTable({
                       {(() => {
                         const rawData = transaction.details as Record<string, unknown> | undefined;
                         const turuack = rawData?.turuack as string | undefined;
-                        const turu = rawData?.turu as string | undefined;
+                        const turu = rawData?.turu;
                         
                         // For orders, show "Alınan Sipariş" or "Verilen Sipariş" based on turu field
-                        if (transaction.type === "order" && turu) {
-                          if (turu === "A") {
+                        // turu can be numeric (1, 2) or string ("A", "V")
+                        if (transaction.type === "order" && turu !== undefined) {
+                          // Numeric: 1 = Alınan, 2 = Verilen (based on DIA API response)
+                          if (turu === 1 || turu === "1" || turu === "A") {
                             return <p className="text-sm">Alınan Sipariş</p>;
-                          } else if (turu === "V") {
+                          } else if (turu === 2 || turu === "2" || turu === "V") {
                             return <p className="text-sm">Verilen Sipariş</p>;
                           }
                         }
