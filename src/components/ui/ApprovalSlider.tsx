@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Check, X, Search } from "lucide-react";
 
@@ -8,6 +8,7 @@ interface ApprovalSliderProps {
   onAnalyze?: () => void;
   disabled?: boolean;
   size?: "sm" | "md";
+  currentStatus?: "pending" | "approved" | "rejected" | "analyzing";
 }
 
 export function ApprovalSlider({
@@ -16,13 +17,34 @@ export function ApprovalSlider({
   onAnalyze,
   disabled = false,
   size = "md",
+  currentStatus = "pending",
 }: ApprovalSliderProps) {
   const [position, setPosition] = useState<"left" | "center" | "right">("center");
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Set initial position based on current status
+  useEffect(() => {
+    if (currentStatus === "approved") {
+      setPosition("right");
+    } else if (currentStatus === "rejected") {
+      setPosition("left");
+    } else {
+      setPosition("center");
+    }
+  }, [currentStatus]);
+
   const handleClick = (newPosition: "left" | "center" | "right") => {
     if (disabled) return;
+    
+    // If clicking the same position as current status, just open analyze
+    if (
+      (newPosition === "right" && currentStatus === "approved") ||
+      (newPosition === "left" && currentStatus === "rejected")
+    ) {
+      if (onAnalyze) onAnalyze();
+      return;
+    }
     
     setPosition(newPosition);
     
@@ -35,8 +57,6 @@ export function ApprovalSlider({
       } else if (newPosition === "center" && onAnalyze) {
         onAnalyze();
       }
-      // Reset to center after action
-      setTimeout(() => setPosition("center"), 300);
     }, 200);
   };
 
@@ -79,7 +99,7 @@ export function ApprovalSlider({
             ? "bg-destructive text-destructive-foreground scale-110" 
             : "hover:bg-destructive/20 text-destructive"
         )}
-        title="Reddet"
+        title={currentStatus === "rejected" ? "Reddedildi - Detay için tıkla" : "Reddet"}
       >
         <X className={s.icon} />
       </button>
@@ -92,7 +112,7 @@ export function ApprovalSlider({
           "flex items-center justify-center rounded-full transition-all z-10",
           s.zone,
           "h-full",
-          position === "center" 
+          position === "center" && currentStatus === "pending"
             ? "bg-primary text-primary-foreground" 
             : "hover:bg-primary/20 text-primary"
         )}
@@ -113,7 +133,7 @@ export function ApprovalSlider({
             ? "bg-success text-success-foreground scale-110" 
             : "hover:bg-success/20 text-success"
         )}
-        title="Onayla"
+        title={currentStatus === "approved" ? "Onaylandı - Detay için tıkla" : "Onayla"}
       >
         <Check className={s.icon} />
       </button>
