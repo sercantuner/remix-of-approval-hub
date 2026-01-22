@@ -114,25 +114,25 @@ function isHiddenField(field: string): boolean {
 
 function formatValueWithCurrency(value: unknown, fieldName?: string, currency?: string): string {
   if (value === null || value === undefined || value === '') return '-';
+  
+  // Parse numeric value
+  let numValue: number | null = null;
   if (typeof value === 'number') {
+    numValue = value;
+  } else if (typeof value === 'string' && !isNaN(parseFloat(value))) {
+    numValue = parseFloat(value);
+  }
+  
+  // If it's a number, format appropriately
+  if (numValue !== null) {
     // Check if this is a currency field - format with currency symbol
     if (fieldName && CURRENCY_FIELDS.includes(fieldName.toLowerCase())) {
-      return formatCurrency(value, currency || 'TRY');
-    }
-    // All other numbers: format with 2 decimal places
-    return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-  }
-  // Handle string numbers (some API responses return numbers as strings)
-  if (typeof value === 'string' && !isNaN(parseFloat(value)) && fieldName) {
-    const numValue = parseFloat(value);
-    if (CURRENCY_FIELDS.includes(fieldName.toLowerCase())) {
       return formatCurrency(numValue, currency || 'TRY');
     }
-    // Format numeric strings with 2 decimals
-    if (['miktar', 'adet', 'kdvorani', 'indirimorani', 'kdv', 'iskonto'].includes(fieldName.toLowerCase())) {
-      return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numValue);
-    }
+    // All numeric values: format with 2 decimal places (Turkish locale)
+    return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numValue);
   }
+  
   if (typeof value === 'boolean') return value ? 'Evet' : 'Hayır';
   return String(value);
 }
@@ -145,14 +145,18 @@ function isCurrencyField(fieldName: string): boolean {
 function flattenLineItem(item: Record<string, unknown>, transactionType: string): Record<string, unknown> {
   const flat: Record<string, unknown> = { ...item };
   
-  // For orders: use turuack (Verilen Sipariş / Alınan Sipariş)
-  // For invoices: use turutxt or aciklama (Satış Faturası, Mal Alım, etc.)
+  // Get stock name from nested _key_stk_stokkart object
+  const stokKart = item._key_stk_stokkart as Record<string, unknown> | undefined;
+  const stokAdi = stokKart?.adi || stokKart?.kodu || item.stokadi || item.stok_adi || null;
+  
+  // For orders: use turuack or stock name
+  // For invoices: use turutxt or stock name
   if (transactionType === 'order') {
-    // Use turuack field for order type description
-    flat.aciklama = item.turuack || item.aciklama || '-';
+    // Use turuack for order type, fallback to stock name
+    flat.aciklama = item.turuack || stokAdi || item.aciklama || '-';
   } else if (transactionType === 'invoice') {
-    // Use turutxt or aciklama for invoice type description
-    flat.aciklama = item.turutxt || item.aciklama || '-';
+    // Use turutxt for invoice type, fallback to stock name
+    flat.aciklama = item.turutxt || stokAdi || item.aciklama || '-';
   } else {
     // _key_kalemturu.aciklama -> aciklama
     if (item._key_kalemturu && typeof item._key_kalemturu === 'object') {
@@ -160,6 +164,10 @@ function flattenLineItem(item: Record<string, unknown>, transactionType: string)
       if (kalemTuru.aciklama) {
         flat.aciklama = kalemTuru.aciklama;
       }
+    }
+    // Fallback to stock name
+    if (!flat.aciklama || flat.aciklama === '-') {
+      flat.aciklama = stokAdi || item.aciklama || '-';
     }
   }
   
@@ -169,6 +177,17 @@ function flattenLineItem(item: Record<string, unknown>, transactionType: string)
     if (Array.isArray(birimler[0]) && birimler[0].length > 1) {
       flat.birim = birimler[0][1] || '';
     }
+  }
+  // Also check _key_stk_stokkart_birimler for birim
+  if (!flat.birim && stokKart) {
+    const birimler = stokKart._key_stk_stokkart_birimler as Array<Record<string, unknown>> | undefined;
+    if (birimler && birimler.length > 0 && birimler[0].birim) {
+      flat.birim = birimler[0].birim;
+    }
+  }
+  // Fallback birim from item itself
+  if (!flat.birim) {
+    flat.birim = item.birim || item.birimkodu || '-';
   }
   
   // Normalize field names (different API responses use different names)
