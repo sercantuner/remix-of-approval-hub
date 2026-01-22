@@ -236,24 +236,22 @@ Deno.serve(async (req) => {
       for (const record of records) {
         const diaKey = String(record[mapping.keyField] || record._key);
         
-        // Get counterparty name - check nested objects for orders
-        // For orders, the customer name is in _key_scf_carikart.unvan (nested object)
-        let counterparty: string = "";
-        if (txType === "order") {
-          // Check nested _key_scf_carikart object first (from list response)
-          const carikart = record._key_scf_carikart;
-          if (carikart && typeof carikart === "object" && carikart.unvan) {
-            counterparty = carikart.unvan;
-          } else {
-            counterparty = record.__carifirma || record.cariunvan || record.unvan || "Bilinmiyor";
-          }
-        } else {
-          counterparty = record.__carifirma || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
+        // Get counterparty name - use same flattened field approach for all types
+        // DIA API returns flattened fields like __carifirma, __cariunvan in list responses
+        let counterparty: string = record.__carifirma || record.__cariunvan || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "";
+        
+        // If still empty, try nested objects (for some response formats)
+        if (!counterparty && record._key_scf_carikart && typeof record._key_scf_carikart === "object") {
+          counterparty = record._key_scf_carikart.unvan || "";
         }
+        
+        // Handle case where counterparty might still be an object
         if (typeof counterparty === "object" && counterparty !== null) {
           const cpObj = counterparty as Record<string, string>;
-          counterparty = cpObj.__carifirma || cpObj.cariunvan || cpObj.unvan || cpObj.aciklama || "Bilinmiyor";
+          counterparty = cpObj.__carifirma || cpObj.cariunvan || cpObj.unvan || cpObj.aciklama || "";
         }
+        
+        counterparty = counterparty || "Bilinmiyor";
         
         // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank
         let amount = 0;
