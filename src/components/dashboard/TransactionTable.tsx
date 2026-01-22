@@ -4,8 +4,7 @@ import {
   X, 
   Eye, 
   MoreHorizontal,
-  FileText,
-  ExternalLink 
+  FileText
 } from 'lucide-react';
 import { Transaction, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
@@ -200,10 +199,6 @@ export function TransactionTable({
                         <DropdownMenuItem onClick={() => onReject([transaction.id])}>
                           <X className="w-4 h-4 mr-2 text-destructive" />
                           Reddet
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onViewDetails(transaction)}>
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Dia'da Görüntüle
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
