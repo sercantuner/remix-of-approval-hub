@@ -38,10 +38,10 @@ export function TransactionDetailModal({
 }: TransactionDetailModalProps) {
   if (!transaction) return null;
 
-  // Extract e-fatura and e-arsiv links from raw data
+  // Extract e-fatura and e-arsiv links from raw data (doğru alan adları: efaturalinki, earsivlinki)
   const rawData = transaction.details as Record<string, unknown> | undefined;
-  const efaturaLink = rawData?.efatura_link as string | undefined || rawData?.efatura as string | undefined;
-  const earsivLink = rawData?.earsiv_link as string | undefined || rawData?.["e-arsiv_link"] as string | undefined || rawData?.earsiv as string | undefined;
+  const efaturaLink = rawData?.efaturalinki as string | undefined || rawData?.efatura_link as string | undefined;
+  const earsivLink = rawData?.earsivlinki as string | undefined || rawData?.earsiv_link as string | undefined;
 
   const detailItems = [
     { label: 'Belge Türü', value: TRANSACTION_TYPE_LABELS[transaction.type], icon: FileText },

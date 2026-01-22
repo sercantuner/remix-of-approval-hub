@@ -4,7 +4,8 @@ import {
   X, 
   Eye, 
   MoreHorizontal,
-  FileText
+  FileText,
+  Receipt
 } from 'lucide-react';
 import { Transaction, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
@@ -153,6 +154,28 @@ export function TransactionTable({
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-muted-foreground" />
                     <span className="font-mono text-sm">{transaction.documentNo}</span>
+                    {/* E-fatura ikonu - linki varsa göster */}
+                    {(() => {
+                      const rawData = transaction.details as Record<string, unknown> | undefined;
+                      const efaturaLink = rawData?.efaturalinki as string | undefined;
+                      const earsivLink = rawData?.earsivlinki as string | undefined;
+                      const hasLink = efaturaLink || earsivLink;
+                      if (hasLink) {
+                        return (
+                          <a
+                            href={(efaturaLink || earsivLink) as string}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:text-primary/80 transition-colors"
+                            title={efaturaLink ? "E-Fatura Görüntüle" : "E-Arşiv Görüntüle"}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Receipt className="w-4 h-4" />
+                          </a>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </td>
                 <td className="p-4">

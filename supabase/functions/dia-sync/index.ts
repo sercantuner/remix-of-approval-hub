@@ -221,10 +221,10 @@ Deno.serve(async (req) => {
         for (const record of records) {
           const diaKey = String(record[mapping.keyField] || record._key);
           
-          // Get counterparty name - prefer unvan/cariunvan fields
-          let counterparty = record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
+          // Get counterparty name - prefer __carifirma (fatura), then cariunvan, then unvan
+          let counterparty = record.__carifirma || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
           if (typeof counterparty === "object") {
-            counterparty = counterparty?.unvan || counterparty?.cariunvan || counterparty?.aciklama || "Bilinmiyor";
+            counterparty = counterparty?.__carifirma || counterparty?.cariunvan || counterparty?.unvan || counterparty?.aciklama || "Bilinmiyor";
           }
           
           // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank
@@ -259,10 +259,10 @@ Deno.serve(async (req) => {
           // Get approval status for orders
           const approvalStatus = mapping.approvalField ? record[mapping.approvalField] : null;
           
-          // Get attachment URL - e-fatura or e-arsiv link
+          // Get attachment URL - e-fatura or e-arsiv link (doğru alan adları: efaturalinki, earsivlinki)
           let attachmentUrl = null;
           if (txType === "invoice") {
-            attachmentUrl = record.efatura_link || record.efatura || record["e-arsiv_link"] || record.earsiv_link || record.earsiv || null;
+            attachmentUrl = record.efaturalinki || record.earsivlinki || record.efatura_link || record.earsiv_link || null;
           }
 
           transactionsToUpsert.push({
