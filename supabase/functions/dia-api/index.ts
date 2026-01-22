@@ -50,7 +50,7 @@ interface DetailMethodConfig {
 }
 
 const DETAIL_METHOD_MAPPING: Record<string, DetailMethodConfig> = {
-  order: { method: "scf_siparis_listele_ayrintili", endpoint: "scf" },
+  order: { method: "scf_siparis_getir", endpoint: "scf", useKeyParam: true },
   invoice: { method: "scf_fatura_getir", endpoint: "scf", useKeyParam: true },
   bank: { method: "bcs_banka_fisi_listele", endpoint: "bcs" },
   current_account: { method: "scf_carihesap_fisi_listele", endpoint: "scf" },
