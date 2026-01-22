@@ -45,12 +45,13 @@ const operatorMap: Record<string, string> = {
 interface DetailMethodConfig {
   method: string;
   endpoint: string;
+  useKeyParam?: boolean; // Use "key" param instead of filters
   params?: Record<string, unknown>;
 }
 
 const DETAIL_METHOD_MAPPING: Record<string, DetailMethodConfig> = {
   order: { method: "scf_siparis_listele_ayrintili", endpoint: "scf" },
-  invoice: { method: "scf_fatura_listele_ayrintili", endpoint: "scf" },
+  invoice: { method: "scf_fatura_getir", endpoint: "scf", useKeyParam: true },
   bank: { method: "bcs_banka_fisi_listele", endpoint: "bcs" },
   current_account: { method: "scf_carihesap_fisi_listele", endpoint: "scf" },
   cash: { 
@@ -279,19 +280,35 @@ Deno.serve(async (req) => {
 
       const diaDetailUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/${detailConfig.endpoint}/json`;
       
-      // Build detail payload with _key filter
-      const detailPayload = {
-        [detailConfig.method]: {
-          session_id: session.session_id,
-          firma_kodu: session.firma_kodu,
-          donem_kodu: session.donem_kodu,
-          filters: [{ field: "_key", operator: "", value: recordKey }],
-          sorts: "",
-          params: detailConfig.params || "",
-          limit: 1,
-          offset: 0,
-        },
-      };
+      // Build detail payload - use key param for some methods, filters for others
+      let detailPayload: Record<string, unknown>;
+      
+      if (detailConfig.useKeyParam) {
+        // Use key parameter directly (e.g., scf_fatura_getir)
+        detailPayload = {
+          [detailConfig.method]: {
+            session_id: session.session_id,
+            firma_kodu: session.firma_kodu,
+            donem_kodu: session.donem_kodu,
+            key: recordKey,
+            params: detailConfig.params || "",
+          },
+        };
+      } else {
+        // Use filters with _key field
+        detailPayload = {
+          [detailConfig.method]: {
+            session_id: session.session_id,
+            firma_kodu: session.firma_kodu,
+            donem_kodu: session.donem_kodu,
+            filters: [{ field: "_key", operator: "", value: recordKey }],
+            sorts: "",
+            params: detailConfig.params || "",
+            limit: 1,
+            offset: 0,
+          },
+        };
+      }
 
       console.log(`[dia-api] Fetching detail from ${diaDetailUrl} for ${transactionType}, key: ${recordKey}`);
 
