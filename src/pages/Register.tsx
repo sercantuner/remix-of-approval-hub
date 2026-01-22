@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Lock, Mail, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, User, Loader2 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,30 +8,31 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-export default function Login() {
+export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Check if already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        navigate("/dashboard");
-      }
-    });
-  }, [navigate]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email || !password) {
+    if (!email || !password || !fullName) {
       toast({
         title: "Hata",
-        description: "Lütfen e-posta ve şifrenizi girin.",
+        description: "Lütfen tüm alanları doldurun.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "Hata",
+        description: "Şifre en az 6 karakter olmalıdır.",
         variant: "destructive",
       });
       return;
@@ -39,25 +40,31 @@ export default function Login() {
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: fullName,
+        },
+        emailRedirectTo: window.location.origin,
+      },
     });
 
     setIsLoading(false);
 
     if (error) {
       toast({
-        title: "Giriş Başarısız",
+        title: "Kayıt Başarısız",
         description: error.message,
         variant: "destructive",
       });
     } else {
       toast({
-        title: "Hoş Geldiniz",
-        description: "Başarıyla giriş yaptınız.",
+        title: "Kayıt Başarılı",
+        description: "Hesabınız oluşturuldu. Giriş yapabilirsiniz.",
       });
-      navigate("/dashboard");
+      navigate("/login");
     }
   };
 
@@ -71,26 +78,15 @@ export default function Login() {
           <Logo size="lg" className="mb-8 text-white" />
 
           <h1 className="text-4xl font-bold text-white text-center mb-4">
-            İşlem Onay Sistemi
+            Sümen'e Katılın
           </h1>
           <p className="text-lg text-white/80 text-center max-w-md">
-            Dia ERP ile entegre çalışan, güvenli ve hızlı işlem onay platformu.
+            Dia ERP işlemlerinizi kolayca onaylayın ve yönetin.
           </p>
-
-          <div className="mt-12 grid grid-cols-2 gap-6 text-white/90">
-            <div className="text-center">
-              <p className="text-3xl font-bold">100+</p>
-              <p className="text-sm text-white/70">Günlük İşlem</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold">%99.9</p>
-              <p className="text-sm text-white/70">Güvenilirlik</p>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Right Panel - Login Form */}
+      {/* Right Panel - Register Form */}
       <div className="flex-1 flex items-center justify-center p-8 bg-background">
         <div className="w-full max-w-md animate-fade-in">
           <div className="lg:hidden mb-8 flex justify-center">
@@ -98,13 +94,29 @@ export default function Login() {
           </div>
 
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-foreground">Giriş Yap</h2>
+            <h2 className="text-2xl font-bold text-foreground">Hesap Oluştur</h2>
             <p className="text-muted-foreground mt-2">
-              Hesabınıza giriş yaparak onay süreçlerinizi yönetin
+              Yeni bir hesap oluşturun
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Ad Soyad</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="Ahmet Yılmaz"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="pl-10 h-12"
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">E-posta</Label>
               <div className="relative">
@@ -156,26 +168,20 @@ export default function Login() {
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Giriş Yapılıyor...
+                  Kayıt Yapılıyor...
                 </>
               ) : (
-                "Giriş Yap"
+                "Kayıt Ol"
               )}
             </Button>
           </form>
 
           <p className="mt-8 text-center text-sm text-muted-foreground">
-            Hesabınız yok mu?{" "}
-            <Link to="/register" className="text-primary hover:underline font-medium">
-              Kayıt Olun
+            Zaten hesabınız var mı?{" "}
+            <Link to="/login" className="text-primary hover:underline font-medium">
+              Giriş Yapın
             </Link>
           </p>
-
-          <div className="mt-8 pt-8 border-t text-center">
-            <p className="text-xs text-muted-foreground">
-              Dia ERP ile entegre çalışır • v1.0.0
-            </p>
-          </div>
         </div>
       </div>
     </div>
