@@ -236,11 +236,17 @@ Deno.serve(async (req) => {
       for (const record of records) {
         const diaKey = String(record[mapping.keyField] || record._key);
         
-        // Get counterparty name - prefer __carifirma (fatura), then cariunvan, then unvan
-        // For orders specifically, try unvan field first as it contains the customer name
+        // Get counterparty name - check nested objects for orders
+        // For orders, the customer name is in _key_scf_carikart.unvan (nested object)
         let counterparty: string = "";
         if (txType === "order") {
-          counterparty = record.unvan || record.__carifirma || record.cariunvan || "Bilinmiyor";
+          // Check nested _key_scf_carikart object first (from list response)
+          const carikart = record._key_scf_carikart;
+          if (carikart && typeof carikart === "object" && carikart.unvan) {
+            counterparty = carikart.unvan;
+          } else {
+            counterparty = record.__carifirma || record.cariunvan || record.unvan || "Bilinmiyor";
+          }
         } else {
           counterparty = record.__carifirma || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
         }
