@@ -17,6 +17,7 @@ import { CategoryCard } from "@/components/dashboard/CategoryCard";
 import { TransactionTable } from "@/components/dashboard/TransactionTable";
 import { TransactionDetailModal } from "@/components/dashboard/TransactionDetailModal";
 import { DiaConnectionForm } from "@/components/settings/DiaConnectionForm";
+import { RejectReasonDialog } from "@/components/dashboard/RejectReasonDialog";
 import { SyncProgress } from "@/components/ui/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +73,10 @@ export default function Dashboard() {
   const [user, setUser] = useState<{ id: string; email: string; full_name?: string } | null>(null);
   const [hasDiaConnection, setHasDiaConnection] = useState<boolean | null>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [rejectDialogState, setRejectDialogState] = useState<{
+    isOpen: boolean;
+    transactionIds: string[];
+  }>({ isOpen: false, transactionIds: [] });
 
   // Handle sidebar section change - set category filter based on section
   const handleSectionChange = (section: string) => {
@@ -249,9 +254,16 @@ export default function Dashboard() {
     }
   };
 
-  const handleReject = async (ids: string[]) => {
+  // Opens reject reason dialog
+  const handleRejectClick = (ids: string[]) => {
+    setRejectDialogState({ isOpen: true, transactionIds: ids });
+  };
+
+  // Actual reject with reason
+  const handleRejectConfirm = async (reason: string) => {
+    const ids = rejectDialogState.transactionIds;
     try {
-      await diaApprove(ids, "reject");
+      await diaApprove(ids, "reject", reason);
       // Update local state immediately without removing from list
       setTransactions(prev => 
         prev.map(t => ids.includes(t.id) ? { ...t, status: "rejected" as const } : t)
@@ -571,7 +583,7 @@ export default function Dashboard() {
               <TransactionTable
                 transactions={filteredTransactions}
                 onApprove={handleApprove}
-                onReject={handleReject}
+                onReject={handleRejectClick}
                 onViewDetails={setSelectedTransaction}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
@@ -586,7 +598,14 @@ export default function Dashboard() {
         open={!!selectedTransaction}
         onClose={() => setSelectedTransaction(null)}
         onApprove={(id) => handleApprove([id])}
-        onReject={(id) => handleReject([id])}
+        onReject={(id) => handleRejectClick([id])}
+      />
+
+      <RejectReasonDialog
+        open={rejectDialogState.isOpen}
+        onClose={() => setRejectDialogState({ isOpen: false, transactionIds: [] })}
+        onConfirm={handleRejectConfirm}
+        transactionCount={rejectDialogState.transactionIds.length}
       />
 
       <SyncProgress
