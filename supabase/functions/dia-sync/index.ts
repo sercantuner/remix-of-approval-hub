@@ -5,13 +5,53 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Transaction type mappings
+// Transaction type mappings - Updated with correct DIA API v3 specifications
 const MODULE_MAPPINGS = {
-  invoice: { module: "scf_fatura", keyField: "_key", docField: "fisno", amountField: "toplam_tutar", dateField: "tarih", counterpartyField: "_key_scf_carikart" },
-  current_account: { module: "scf_carihesap_fisi", keyField: "_key", docField: "fisno", amountField: "borc", dateField: "tarih", counterpartyField: "_key_scf_carikart" },
-  bank: { module: "bcs_bankahesap_fisi", keyField: "_key", docField: "fisno", amountField: "tutar", dateField: "tarih", counterpartyField: "aciklama" },
-  cash: { module: "bcs_kasahesap_fisi", keyField: "_key", docField: "fisno", amountField: "tutar", dateField: "tarih", counterpartyField: "aciklama" },
-  check_note: { module: "bcs_cek", keyField: "_key", docField: "cekno", amountField: "tutar", dateField: "vade", counterpartyField: "_key_scf_carikart" },
+  invoice: { 
+    method: "scf_fatura_listele",
+    endpoint: "scf/json",
+    keyField: "_key", 
+    docField: "fisno", 
+    amountField: "toplam_tutar", 
+    dateField: "tarih", 
+    counterpartyField: "_key_scf_carikart" 
+  },
+  current_account: { 
+    method: "scf_carihesap_fisi_listele_ayrintili",
+    endpoint: "scf/json",
+    keyField: "_key", 
+    docField: "fisno", 
+    amountField: "borc", 
+    dateField: "tarih", 
+    counterpartyField: "_key_scf_carikart" 
+  },
+  bank: { 
+    method: "bcs_banka_fisi_listele_ayrintili",
+    endpoint: "bcs/json",
+    keyField: "_key", 
+    docField: "fisno", 
+    amountField: "tutar", 
+    dateField: "tarih", 
+    counterpartyField: "aciklama" 
+  },
+  cash: { 
+    method: "scf_kasaislemleri_listele",
+    endpoint: "scf/json",
+    keyField: "_key", 
+    docField: "fisno", 
+    amountField: "tutar", 
+    dateField: "tarih", 
+    counterpartyField: "aciklama" 
+  },
+  order: { 
+    method: "scf_siparis_listele",
+    endpoint: "scf/json",
+    keyField: "_key", 
+    docField: "siparisno", 
+    amountField: "toplam_tutar", 
+    dateField: "tarih", 
+    counterpartyField: "_key_scf_carikart" 
+  },
 };
 
 async function getValidSession(supabase: any, userId: string) {
@@ -27,36 +67,41 @@ async function getValidSession(supabase: any, userId: string) {
 
   const expiresAt = new Date(profile.dia_session_expires);
   if (expiresAt.getTime() - 2 * 60 * 1000 < Date.now()) {
-    // Auto refresh session
-    const diaBaseUrl = `https://${profile.dia_sunucu_adi}.dia.com.tr/api/sis/json`;
+    // Auto refresh session - Using correct DIA API v3 URL and format
+    const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
     try {
       const loginResponse = await fetch(diaBaseUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           login: {
-            api_key: profile.dia_api_key,
-            kullanici: profile.dia_ws_kullanici,
-            sifre: profile.dia_ws_sifre,
-            firma_kodu: profile.dia_firma_kodu,
-            donem_kodu: profile.dia_donem_kodu,
+            username: profile.dia_ws_kullanici,
+            password: profile.dia_ws_sifre,
+            disconnect_same_user: true,
+            lang: "tr",
+            params: {
+              apikey: profile.dia_api_key,
+              firma_kodu: profile.dia_firma_kodu,
+              donem_kodu: profile.dia_donem_kodu,
+            },
           },
         }),
       });
 
       const loginResult = await loginResponse.json();
-      if (loginResult.login?.session_id) {
+      // DIA returns: { code: "200", msg: "session_id", warnings: [] }
+      if (loginResult.code === "200" && loginResult.msg) {
         await supabase
           .from("profiles")
           .update({
-            dia_session_id: loginResult.login.session_id,
+            dia_session_id: loginResult.msg,
             dia_session_expires: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
           })
           .eq("id", userId);
 
         return {
           ...profile,
-          dia_session_id: loginResult.login.session_id,
+          dia_session_id: loginResult.msg,
         };
       }
     } catch (e) {
@@ -68,22 +113,24 @@ async function getValidSession(supabase: any, userId: string) {
   return profile;
 }
 
-async function fetchDiaData(profile: any, module: string, filters: any[] = []) {
-  const moduleParts = module.split("_");
-  const modulePrefix = moduleParts[0];
-  const diaBaseUrl = `https://${profile.dia_sunucu_adi}.dia.com.tr/api/${modulePrefix}/json`;
+async function fetchDiaData(profile: any, method: string, endpoint: string) {
+  // Using correct DIA API v3 URL structure
+  const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/${endpoint}`;
 
   const payload = {
-    [`${module}_listele`]: {
+    [method]: {
       session_id: profile.dia_session_id,
       firma_kodu: profile.dia_firma_kodu,
       donem_kodu: profile.dia_donem_kodu,
-      filters,
-      sorts: [{ field: "tarih", sorttype: "DESC" }],
+      filters: "",
+      sorts: "",
+      params: "",
       limit: 100,
       offset: 0,
     },
   };
+
+  console.log(`[dia-sync] Calling ${diaBaseUrl} with method: ${method}`);
 
   const response = await fetch(diaBaseUrl, {
     method: "POST",
@@ -91,7 +138,10 @@ async function fetchDiaData(profile: any, module: string, filters: any[] = []) {
     body: JSON.stringify(payload),
   });
 
-  return response.json();
+  const result = await response.json();
+  console.log(`[dia-sync] ${method} raw response:`, JSON.stringify(result).substring(0, 500));
+  
+  return result;
 }
 
 Deno.serve(async (req) => {
@@ -139,11 +189,12 @@ Deno.serve(async (req) => {
     // Fetch data for each transaction type
     for (const [txType, mapping] of Object.entries(MODULE_MAPPINGS)) {
       try {
-        console.log(`[dia-sync] Fetching ${txType} from ${mapping.module}`);
-        const result = await fetchDiaData(profile, mapping.module);
+        console.log(`[dia-sync] Fetching ${txType} using ${mapping.method}`);
+        const result = await fetchDiaData(profile, mapping.method, mapping.endpoint);
         
-        const methodKey = `${mapping.module}_listele`;
-        const records = result[methodKey]?.kayitlar || result[methodKey]?.records || [];
+        // DIA response structure: { method_name: { kayitlar: [...] } } or { method_name: { records: [...] } }
+        const methodKey = mapping.method;
+        const records = result[methodKey]?.kayitlar || result[methodKey]?.records || result[methodKey]?.data || [];
         
         syncResults[txType] = { count: records.length, success: true };
 
@@ -156,7 +207,7 @@ Deno.serve(async (req) => {
 
           transactionsToUpsert.push({
             user_id: userId,
-            dia_record_id: `${mapping.module}-${diaKey}`,
+            dia_record_id: `${mapping.method}-${diaKey}`,
             transaction_type: txType,
             document_no: record[mapping.docField] || diaKey,
             description: record.aciklama || record.not || `${txType} işlemi`,

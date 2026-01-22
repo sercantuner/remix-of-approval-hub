@@ -63,15 +63,19 @@ async function getValidSession(supabase: any, userId: string): Promise<DiaSessio
   if (expiresAt.getTime() - bufferTime < Date.now()) {
     console.log("[dia-api] Session expired or expiring soon, need to refresh");
     
-    // Auto-login to get new session
-    const diaBaseUrl = `https://${profile.dia_sunucu_adi}.dia.com.tr/api/sis/json`;
+    // Auto-login to get new session - Using correct DIA API v3 URL and format
+    const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
     const loginPayload = {
       login: {
-        api_key: profile.dia_api_key,
-        kullanici: profile.dia_ws_kullanici,
-        sifre: profile.dia_ws_sifre,
-        firma_kodu: profile.dia_firma_kodu,
-        donem_kodu: profile.dia_donem_kodu,
+        username: profile.dia_ws_kullanici,
+        password: profile.dia_ws_sifre,
+        disconnect_same_user: true,
+        lang: "tr",
+        params: {
+          apikey: profile.dia_api_key,
+          firma_kodu: profile.dia_firma_kodu,
+          donem_kodu: profile.dia_donem_kodu,
+        },
       },
     };
 
@@ -84,8 +88,9 @@ async function getValidSession(supabase: any, userId: string): Promise<DiaSessio
 
       const loginResult = await loginResponse.json();
       
-      if (loginResult.login?.session_id) {
-        const newSessionId = loginResult.login.session_id;
+      // DIA returns: { code: "200", msg: "session_id", warnings: [] }
+      if (loginResult.code === "200" && loginResult.msg) {
+        const newSessionId = loginResult.msg;
         const newExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
         await supabase
@@ -224,10 +229,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Determine the correct API endpoint based on module
+    // Determine the correct API endpoint based on module - Using DIA API v3
     const moduleParts = request.module.split("_");
     const modulePrefix = moduleParts[0]; // e.g., "scf", "bcs", "sis"
-    const diaBaseUrl = `https://${session.sunucu_adi}.dia.com.tr/api/${modulePrefix}/json`;
+    const diaBaseUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/${modulePrefix}/json`;
 
     // Build DIA payload
     const diaPayload = buildDiaPayload(request.action, request.module, session, request);
