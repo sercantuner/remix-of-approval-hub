@@ -52,21 +52,14 @@ interface DetailMethodConfig {
 const DETAIL_METHOD_MAPPING: Record<string, DetailMethodConfig> = {
   order: { method: "scf_siparis_getir", endpoint: "scf", useKeyParam: true },
   invoice: { method: "scf_fatura_getir", endpoint: "scf", useKeyParam: true },
-  bank: { method: "bcs_banka_fisi_listele", endpoint: "bcs" },
-  current_account: { method: "scf_carihesap_fisi_listele", endpoint: "scf" },
+  bank: { method: "bcs_banka_fisi_getir", endpoint: "bcs", useKeyParam: true },
+  current_account: { method: "scf_carihesap_fisi_getir", endpoint: "scf", useKeyParam: true },
   cash: { 
-    method: "scf_kasakart_hareket_listele", 
+    method: "scf_kasa_fisi_getir", 
     endpoint: "scf",
-    params: { 
-      cari: "True", 
-      banka: "False", 
-      kasa: "False", 
-      otel: "False", 
-      fatura: "False", 
-      ceksenet: "False" 
-    }
+    useKeyParam: true
   },
-  check_note: { method: "bcs_ceksenet_listele", endpoint: "bcs" }
+  check_note: { method: "bcs_ceksenet_getir", endpoint: "bcs", useKeyParam: true }
 };
 
 async function getValidSession(supabase: any, userId: string): Promise<DiaSession | null> {
