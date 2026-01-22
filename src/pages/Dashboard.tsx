@@ -30,6 +30,7 @@ const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   bank: "Banka Hareketleri",
   cash: "Kasa Hareketleri",
   check_note: "Çek/Senet Hareketleri",
+  order: "Siparişler",
 };
 
 export default function Dashboard() {
@@ -126,7 +127,7 @@ export default function Dashboard() {
   );
 
   const groups = useMemo(() => {
-    const types: TransactionType[] = ["invoice", "current_account", "bank", "cash", "check_note"];
+    const types: TransactionType[] = ["invoice", "current_account", "bank", "cash", "check_note", "order"];
 
     return types
       .map((type) => {
