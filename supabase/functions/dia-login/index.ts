@@ -64,8 +64,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build DIA API URL
-    const diaBaseUrl = `https://${sunucuAdi}.dia.com.tr/sis/json`;
+    // Build DIA API URL - format: https://{sunucuAdi}.ws.dia.com.tr/api/v3/sis/json
+    const diaBaseUrl = `https://${sunucuAdi}.ws.dia.com.tr/api/v3/sis/json`;
 
     // Create DIA login request with correct format
     const diaLoginPayload = {
