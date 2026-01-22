@@ -371,6 +371,10 @@ export function TransactionDetailRow({
   const userName = resolveUserName(detailData || {}, userId) || (userId ? userNames[userId] : null);
 
   const currency = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
+  
+  // Get document type (belge türü) - prioritize transaction.details (from sync) since detailData doesn't have turuack
+  const transactionDetails = transaction.details as Record<string, unknown> | undefined;
+  const turuack = transactionDetails?.turuack || detailData?.turuack || null;
 
   return (
     <div className="bg-muted/30 border-t border-b border-muted p-4 animate-in slide-in-from-top-2 duration-200">
@@ -393,9 +397,9 @@ export function TransactionDetailRow({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Document Type (Belge Türü) - from turuack field */}
-              {detailData?.turuack && (
+              {turuack && (
                 <Badge variant="secondary" className="text-xs">
-                  {String(detailData.turuack)}
+                  {String(turuack)}
                 </Badge>
               )}
               {/* Exchange Rate - only show if different from 1 */}
