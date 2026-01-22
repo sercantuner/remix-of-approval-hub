@@ -117,16 +117,32 @@ function getLineItemColumns(type: string, items: Record<string, unknown>[]): str
   
   const allKeys = Object.keys(items[0]).filter(k => !k.startsWith('_'));
   
-  // Priority columns for different types
+  // Exact columns for invoice and order - only show these specific columns
+  const exactColumns: Record<string, string[]> = {
+    order: ['aciklama', 'miktar', 'birim', 'birimfiyat', 'tutar', 'iskonto', 'kdv', 'net'],
+    invoice: ['aciklama', 'miktar', 'birim', 'birimfiyat', 'tutar', 'iskonto', 'kdv', 'net'],
+  };
+  
+  // Priority columns for other types (with fallback behavior)
   const priorityColumns: Record<string, string[]> = {
-    order: ['satirno', 'stokkodu', 'stokadi', 'stok_kodu', 'stok_adi', 'miktar', 'birim', 'birimfiyat', 'tutar', 'kdvorani', 'net'],
-    invoice: ['satirno', 'stokkodu', 'stokadi', 'stok_kodu', 'stok_adi', 'miktar', 'birim', 'birimfiyat', 'tutar', 'kdvorani', 'kdvtutar', 'net'],
     bank: ['aciklama', 'borc', 'alacak', 'bakiye'],
     current_account: ['aciklama', 'borc', 'alacak', 'bakiye', 'belgetarihi'],
     cash: ['aciklama', 'borc', 'alacak', 'bakiye'],
     check_note: ['ceksenetkodu', 'vadetarihi', 'tutar', 'portfoydurumu', 'kesideci'],
   };
 
+  // For invoice and order, only show exact columns
+  if (exactColumns[type]) {
+    const orderedColumns: string[] = [];
+    exactColumns[type].forEach(col => {
+      // Try exact match first, then case-insensitive
+      const found = allKeys.find(k => k === col) || allKeys.find(k => k.toLowerCase() === col.toLowerCase());
+      if (found) orderedColumns.push(found);
+    });
+    return orderedColumns;
+  }
+
+  // For other types, use priority columns with fallback
   const priority = priorityColumns[type] || [];
   const orderedColumns: string[] = [];
   
