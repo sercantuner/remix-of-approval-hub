@@ -396,12 +396,6 @@ export function TransactionDetailRow({
           {/* Header with document type and actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {/* Document Type (Belge Türü) - from turuack field */}
-              {turuack && (
-                <Badge variant="secondary" className="text-xs">
-                  {String(turuack)}
-                </Badge>
-              )}
               {/* Exchange Rate - only show if different from 1 */}
               {detailData?.dovizkuru && parseFloat(String(detailData.dovizkuru)) !== 1 && (
                 <span className="text-xs text-muted-foreground">
