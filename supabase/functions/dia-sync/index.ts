@@ -237,9 +237,16 @@ Deno.serve(async (req) => {
         const diaKey = String(record[mapping.keyField] || record._key);
         
         // Get counterparty name - prefer __carifirma (fatura), then cariunvan, then unvan
-        let counterparty = record.__carifirma || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
-        if (typeof counterparty === "object") {
-          counterparty = counterparty?.__carifirma || counterparty?.cariunvan || counterparty?.unvan || counterparty?.aciklama || "Bilinmiyor";
+        // For orders specifically, try unvan field first as it contains the customer name
+        let counterparty: string = "";
+        if (txType === "order") {
+          counterparty = record.unvan || record.__carifirma || record.cariunvan || "Bilinmiyor";
+        } else {
+          counterparty = record.__carifirma || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
+        }
+        if (typeof counterparty === "object" && counterparty !== null) {
+          const cpObj = counterparty as Record<string, string>;
+          counterparty = cpObj.__carifirma || cpObj.cariunvan || cpObj.unvan || cpObj.aciklama || "Bilinmiyor";
         }
         
         // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank

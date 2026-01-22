@@ -7,9 +7,15 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
-  User
+  User,
+  Receipt,
+  ShoppingCart,
+  Users,
+  Building,
+  Wallet,
+  CreditCard
 } from 'lucide-react';
-import { Transaction, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
+import { Transaction, TRANSACTION_STATUS_LABELS, TransactionType } from '@/types/transaction';
 import { cn, formatCurrency, formatDate, formatExchangeRate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,6 +23,16 @@ import { Badge } from '@/components/ui/badge';
 import { ApprovalSlider } from '@/components/ui/ApprovalSlider';
 import { TransactionDetailRow } from './TransactionDetailRow';
 import { diaFetchUserList, getCachedUserName } from '@/lib/diaApi';
+
+// Transaction type labels and icons
+const TRANSACTION_TYPE_CONFIG: Record<TransactionType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+  invoice: { label: "Fatura", icon: Receipt, color: "bg-blue-100 text-blue-700 border-blue-200" },
+  order: { label: "Sipariş", icon: ShoppingCart, color: "bg-purple-100 text-purple-700 border-purple-200" },
+  current_account: { label: "Cari", icon: Users, color: "bg-orange-100 text-orange-700 border-orange-200" },
+  bank: { label: "Banka", icon: Building, color: "bg-green-100 text-green-700 border-green-200" },
+  cash: { label: "Kasa", icon: Wallet, color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  check_note: { label: "Çek/Senet", icon: CreditCard, color: "bg-pink-100 text-pink-700 border-pink-200" },
+};
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -127,6 +143,9 @@ export function TransactionTable({
               </th>
               <th className="p-4 text-left w-10"></th>
               <th className="p-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Kategori
+              </th>
+              <th className="p-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Belge No
               </th>
               <th className="p-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -195,6 +214,18 @@ export function TransactionTable({
                       </Button>
                     </td>
                     <td className="p-4">
+                      {(() => {
+                        const config = TRANSACTION_TYPE_CONFIG[transaction.type];
+                        const Icon = config.icon;
+                        return (
+                          <Badge variant="outline" className={cn("gap-1 text-xs", config.color)}>
+                            <Icon className="w-3 h-3" />
+                            {config.label}
+                          </Badge>
+                        );
+                      })()}
+                    </td>
+                    <td className="p-4">
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-muted-foreground" />
                         <span className="font-mono text-sm">{transaction.documentNo}</span>
@@ -216,6 +247,17 @@ export function TransactionTable({
                       {(() => {
                         const rawData = transaction.details as Record<string, unknown> | undefined;
                         const turuack = rawData?.turuack as string | undefined;
+                        const turu = rawData?.turu as string | undefined;
+                        
+                        // For orders, show "Alınan Sipariş" or "Verilen Sipariş" based on turu field
+                        if (transaction.type === "order" && turu) {
+                          if (turu === "A") {
+                            return <p className="text-sm">Alınan Sipariş</p>;
+                          } else if (turu === "V") {
+                            return <p className="text-sm">Verilen Sipariş</p>;
+                          }
+                        }
+                        
                         return (
                           <p className="text-sm">
                             {turuack || transaction.description || '-'}
@@ -284,7 +326,7 @@ export function TransactionTable({
                   </tr>
                   {isExpanded && (
                     <tr key={`${transaction.id}-detail`}>
-                      <td colSpan={10} className="p-0">
+                      <td colSpan={11} className="p-0">
                         <TransactionDetailRow 
                           transaction={transaction} 
                           onApprove={() => onApprove([transaction.id])}
