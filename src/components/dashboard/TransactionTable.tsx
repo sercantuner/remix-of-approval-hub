@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Check, 
   X, 
@@ -6,7 +6,8 @@ import {
   FileCheck,
   ChevronDown,
   ChevronUp,
-  Loader2
+  Loader2,
+  User
 } from 'lucide-react';
 import { Transaction, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
 import { cn, formatCurrency, formatDate, formatExchangeRate } from '@/lib/utils';
@@ -15,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ApprovalSlider } from '@/components/ui/ApprovalSlider';
 import { TransactionDetailRow } from './TransactionDetailRow';
+import { diaFetchUserList, getCachedUserName } from '@/lib/diaApi';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -34,6 +36,14 @@ export function TransactionTable({
   onSelectionChange,
 }: TransactionTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [userNames, setUserNames] = useState<Record<number, string>>({});
+  
+  // Fetch user list on mount
+  useEffect(() => {
+    diaFetchUserList()
+      .then(users => setUserNames(users))
+      .catch(err => console.warn('[TransactionTable] Failed to fetch user list:', err));
+  }, []);
   
   const allSelected = transactions.length > 0 && selectedIds.length === transactions.length;
   const someSelected = selectedIds.length > 0 && selectedIds.length < transactions.length;
@@ -128,6 +138,9 @@ export function TransactionTable({
               <th className="p-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Tarih
               </th>
+              <th className="p-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Kaydeden
+              </th>
               <th className="p-4 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Tutar
               </th>
@@ -149,13 +162,13 @@ export function TransactionTable({
 
               return (
                 <>
-                  <tr
+                    <tr
                     key={transaction.id}
                     onClick={() => toggleExpand(transaction.id)}
                     className={cn(
                       'hover:bg-muted/30 transition-colors cursor-pointer',
-                      selectedIds.includes(transaction.id) && 'bg-primary/5',
-                      isExpanded && 'bg-muted/50'
+                      selectedIds.includes(transaction.id) && 'bg-primary/10',
+                      isExpanded && 'bg-primary/20 border-l-4 border-l-primary'
                     )}
                   >
                     <td className="p-4" onClick={(e) => e.stopPropagation()}>
@@ -208,6 +221,21 @@ export function TransactionTable({
                     <td className="p-4">
                       <p className="text-sm text-muted-foreground">{formatDate(transaction.date)}</p>
                     </td>
+                    <td className="p-4">
+                      {(() => {
+                        const rawData = transaction.details as Record<string, unknown> | undefined;
+                        const userId = rawData?._user as number | undefined;
+                        const userName = userId ? (userNames[userId] || getCachedUserName(userId)) : null;
+                        return userName ? (
+                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {userName}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        );
+                      })()}
+                    </td>
                     <td className="p-4 text-right">
                       <div className="flex flex-col items-end">
                         <span className={cn(
@@ -241,7 +269,7 @@ export function TransactionTable({
                   </tr>
                   {isExpanded && (
                     <tr key={`${transaction.id}-detail`}>
-                      <td colSpan={9} className="p-0">
+                      <td colSpan={10} className="p-0">
                         <TransactionDetailRow 
                           transaction={transaction} 
                           onApprove={() => onApprove([transaction.id])}
