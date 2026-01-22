@@ -389,13 +389,26 @@ export function TransactionDetailRow({
 
       {!isLoading && !error && detailData && (
         <div className="space-y-4">
-          {/* Header with actions only - removed redundant title/docNo/currency */}
+          {/* Header with document type and actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              {/* Document Type (Belge Türü) - from turuack field */}
+              {detailData?.turuack && (
+                <Badge variant="secondary" className="text-xs">
+                  {String(detailData.turuack)}
+                </Badge>
+              )}
               {/* Exchange Rate - only show if different from 1 */}
               {detailData?.dovizkuru && parseFloat(String(detailData.dovizkuru)) !== 1 && (
                 <span className="text-xs text-muted-foreground">
                   Kur: {formatExchangeRate(parseFloat(String(detailData.dovizkuru)))}
+                </span>
+              )}
+              {/* User name */}
+              {userName && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  {userName}
                 </span>
               )}
             </div>
