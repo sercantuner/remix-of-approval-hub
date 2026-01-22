@@ -200,7 +200,8 @@ export function TransactionTable({
                       onApprove={() => onApprove([transaction.id])}
                       onReject={() => onReject([transaction.id])}
                       onAnalyze={() => onViewDetails(transaction)}
-                      disabled={transaction.status !== 'pending'}
+                      disabled={false}
+                      currentStatus={transaction.status}
                     />
                   </div>
                 </td>
