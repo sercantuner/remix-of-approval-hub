@@ -152,20 +152,24 @@ export default function Dashboard() {
     if (error) {
       console.error("Error loading transactions:", error);
     } else if (data) {
-      const mapped: Transaction[] = data.map((t) => ({
-        id: t.id,
-        type: t.transaction_type as TransactionType,
-        description: t.description || "",
-        amount: Number(t.amount),
-        currency: t.currency || "TRY",
-        date: t.transaction_date,
-        documentNo: t.document_no,
-        counterparty: t.counterparty || "",
-        status: t.status as Transaction["status"],
-        diaRecordId: t.dia_record_id,
-        attachmentUrl: t.attachment_url,
-        details: t.dia_raw_data as Record<string, unknown>,
-      }));
+      const mapped: Transaction[] = data.map((t) => {
+        const rawData = t.dia_raw_data as Record<string, unknown> | null;
+        return {
+          id: t.id,
+          type: t.transaction_type as TransactionType,
+          description: t.description || "",
+          amount: Number(t.amount),
+          currency: t.currency || "TRY",
+          exchangeRate: rawData?.dovizkuru ? parseFloat(String(rawData.dovizkuru)) : 1,
+          date: t.transaction_date,
+          documentNo: t.document_no,
+          counterparty: t.counterparty || "",
+          status: t.status as Transaction["status"],
+          diaRecordId: t.dia_record_id,
+          attachmentUrl: t.attachment_url,
+          details: rawData,
+        };
+      });
       setTransactions(mapped);
     }
 

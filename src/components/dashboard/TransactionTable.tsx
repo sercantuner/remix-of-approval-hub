@@ -9,7 +9,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Transaction, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
-import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { cn, formatCurrency, formatDate, formatExchangeRate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -209,12 +209,19 @@ export function TransactionTable({
                       <p className="text-sm text-muted-foreground">{formatDate(transaction.date)}</p>
                     </td>
                     <td className="p-4 text-right">
-                      <span className={cn(
-                        'font-semibold tabular-nums',
-                        transaction.amount >= 0 ? 'text-success' : 'text-destructive'
-                      )}>
-                        {formatCurrency(transaction.amount)}
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className={cn(
+                          'font-semibold tabular-nums',
+                          transaction.amount >= 0 ? 'text-success' : 'text-destructive'
+                        )}>
+                          {formatCurrency(transaction.amount, transaction.currency)}
+                        </span>
+                        {transaction.exchangeRate && transaction.exchangeRate !== 1 && (
+                          <span className="text-xs text-muted-foreground">
+                            Kur: {formatExchangeRate(transaction.exchangeRate)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-4 text-center">
                       {getStatusBadge(transaction.status)}

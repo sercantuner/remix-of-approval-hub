@@ -18,6 +18,7 @@ export interface Transaction {
   description: string;
   amount: number;
   currency: string;
+  exchangeRate?: number;
   date: string;
   documentNo: string;
   counterparty: string;

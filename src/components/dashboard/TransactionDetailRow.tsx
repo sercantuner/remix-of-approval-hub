@@ -13,8 +13,11 @@ import {
   Banknote
 } from 'lucide-react';
 import { Transaction, TRANSACTION_TYPE_LABELS, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, formatExchangeRate } from '@/lib/utils';
 import { diaFetchDetail } from '@/lib/diaApi';
+
+// Currency-related fields that should be formatted as money
+const CURRENCY_FIELDS = ['tutar', 'tutari', 'birimfiyat', 'birimfiyati', 'sonbirimfiyati', 'net', 'kdv', 'kdvtutar', 'kdvtutari', 'iskonto', 'iskontotutar', 'indirimtutari', 'indirimtoplam', 'toplam', 'toplamtutar', 'borc', 'alacak', 'bakiye', 'fiyat'];
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -51,6 +54,7 @@ const FIELD_LABELS: Record<string, string> = {
   iskonto: 'İskonto',
   iskontotutar: 'İskonto Tutarı',
   doviz: 'Döviz',
+  dovizturu: 'Döviz Türü',
   dovizkuru: 'Döviz Kuru',
   carikod: 'Cari Kod',
   cariunvan: 'Cari Ünvan',
@@ -80,6 +84,7 @@ const FIELD_LABELS: Record<string, string> = {
   tutar: 'Tutar',
   fiyat: 'Fiyat',
   adet: 'Adet',
+  m_kalemler: 'Kalemler',
 };
 
 // Fields to hide from display
@@ -99,9 +104,13 @@ function isHiddenField(field: string): boolean {
   return HIDDEN_FIELDS.includes(field.toLowerCase()) || field.startsWith('_');
 }
 
-function formatValue(value: unknown): string {
+function formatValueWithCurrency(value: unknown, fieldName?: string, currency?: string): string {
   if (value === null || value === undefined || value === '') return '-';
   if (typeof value === 'number') {
+    // Check if this is a currency field
+    if (fieldName && CURRENCY_FIELDS.includes(fieldName.toLowerCase())) {
+      return formatCurrency(value, currency || 'TRY');
+    }
     if (Math.abs(value) >= 1 || value === 0) {
       return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
     }
@@ -109,6 +118,10 @@ function formatValue(value: unknown): string {
   }
   if (typeof value === 'boolean') return value ? 'Evet' : 'Hayır';
   return String(value);
+}
+
+function isCurrencyField(fieldName: string): boolean {
+  return CURRENCY_FIELDS.includes(fieldName.toLowerCase());
 }
 
 // Get columns for line items table based on transaction type
@@ -271,9 +284,19 @@ export function TransactionDetailRow({
               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                 <FileText className="w-4 h-4 text-primary" />
               </div>
-              <div>
+              <div className="flex items-center gap-2">
                 <span className="font-medium">{TRANSACTION_TYPE_LABELS[transaction.type]}</span>
-                <span className="text-sm text-muted-foreground ml-2">#{transaction.documentNo}</span>
+                <span className="text-sm text-muted-foreground">#{transaction.documentNo}</span>
+                {/* Currency Badge */}
+                <Badge variant="outline" className="ml-1 text-xs">
+                  {(detailData?.dovizturu as string) || transaction.currency || 'TL'}
+                </Badge>
+                {/* Exchange Rate */}
+                {detailData?.dovizkuru && parseFloat(String(detailData.dovizkuru)) !== 1 && (
+                  <span className="text-xs text-muted-foreground">
+                    Kur: {formatExchangeRate(parseFloat(String(detailData.dovizkuru)))}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -326,20 +349,27 @@ export function TransactionDetailRow({
           {/* Main Fields Grid */}
           {mainFields.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {mainFields.slice(0, 12).map(([key, value]) => (
-                <div key={key} className="bg-background/50 rounded-lg p-2">
-                  <span className="text-xs text-muted-foreground block">{getFieldLabel(key)}</span>
-                  <span className="text-sm font-medium truncate block" title={formatValue(value)}>
-                    {formatValue(value)}
-                  </span>
-                </div>
-              ))}
+              {mainFields.slice(0, 12).map(([key, value]) => {
+                const currency = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
+                return (
+                  <div key={key} className="bg-background/50 rounded-lg p-2">
+                    <span className="text-xs text-muted-foreground block">{getFieldLabel(key)}</span>
+                    <span className={cn(
+                      "text-sm font-medium truncate block",
+                      isCurrencyField(key) && "tabular-nums"
+                    )} title={formatValueWithCurrency(value, key, currency)}>
+                      {formatValueWithCurrency(value, key, currency)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {/* Line Items Tables */}
           {lineItems.map(([key, items]) => {
             const columns = getLineItemColumns(transaction.type, items as Record<string, unknown>[]);
+            const currency = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
             
             return (
               <div key={key} className="space-y-2">
@@ -354,7 +384,13 @@ export function TransactionDetailRow({
                     <TableHeader>
                       <TableRow className="bg-muted/50">
                         {columns.map((col) => (
-                          <TableHead key={col} className="text-xs font-medium py-2 px-3 whitespace-nowrap">
+                          <TableHead 
+                            key={col} 
+                            className={cn(
+                              "text-xs font-medium py-2 px-3 whitespace-nowrap",
+                              isCurrencyField(col) && "text-right"
+                            )}
+                          >
                             {getFieldLabel(col)}
                           </TableHead>
                         ))}
@@ -364,8 +400,14 @@ export function TransactionDetailRow({
                       {(items as Record<string, unknown>[]).map((item, idx) => (
                         <TableRow key={idx} className="hover:bg-muted/30">
                           {columns.map((col) => (
-                            <TableCell key={col} className="text-xs py-2 px-3">
-                              {formatValue(item[col])}
+                            <TableCell 
+                              key={col} 
+                              className={cn(
+                                "text-xs py-2 px-3",
+                                isCurrencyField(col) && "text-right tabular-nums"
+                              )}
+                            >
+                              {formatValueWithCurrency(item[col], col, currency)}
                             </TableCell>
                           ))}
                         </TableRow>
