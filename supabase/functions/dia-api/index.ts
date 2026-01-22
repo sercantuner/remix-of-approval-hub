@@ -360,24 +360,61 @@ Deno.serve(async (req) => {
 
       const detailResult = await detailResponse.json();
       
-      // Log m_kalemler structure for debugging
-      if (detailResult.result && detailResult.result.m_kalemler && Array.isArray(detailResult.result.m_kalemler)) {
-        const firstKalem = detailResult.result.m_kalemler[0];
-        if (firstKalem) {
-          // Log full first kalem data (truncated for readability)
-          console.log(`[dia-api] First kalem FULL DATA: ${JSON.stringify(firstKalem).substring(0, 2000)}`);
-          
-          // Log _key_kalemturu if exists
-          if (firstKalem._key_kalemturu) {
-            console.log(`[dia-api] _key_kalemturu: ${JSON.stringify(firstKalem._key_kalemturu)}`);
-          }
+      // ========== FULL DATA LOGGING FOR DEBUGGING ==========
+      if (detailResult.result) {
+        // Log main invoice data (excluding m_kalemler and m_altlar)
+        const mainData = { ...detailResult.result };
+        delete mainData.m_kalemler;
+        delete mainData.m_altlar;
+        
+        const mainStr = JSON.stringify(mainData);
+        console.log(`[dia-api] === MAIN DATA PART 1 ===`);
+        console.log(mainStr.substring(0, 2000));
+        if (mainStr.length > 2000) {
+          console.log(`[dia-api] === MAIN DATA PART 2 ===`);
+          console.log(mainStr.substring(2000, 4000));
         }
+        if (mainStr.length > 4000) {
+          console.log(`[dia-api] === MAIN DATA PART 3 ===`);
+          console.log(mainStr.substring(4000, 6000));
+        }
+        if (mainStr.length > 6000) {
+          console.log(`[dia-api] === MAIN DATA PART 4 ===`);
+          console.log(mainStr.substring(6000, 8000));
+        }
+        
+        // Log first kalem in full
+        if (detailResult.result.m_kalemler && Array.isArray(detailResult.result.m_kalemler) && detailResult.result.m_kalemler.length > 0) {
+          const firstKalem = detailResult.result.m_kalemler[0];
+          const kalemStr = JSON.stringify(firstKalem);
+          console.log(`[dia-api] === FIRST KALEM PART 1 ===`);
+          console.log(kalemStr.substring(0, 2000));
+          if (kalemStr.length > 2000) {
+            console.log(`[dia-api] === FIRST KALEM PART 2 ===`);
+            console.log(kalemStr.substring(2000, 4000));
+          }
+          if (kalemStr.length > 4000) {
+            console.log(`[dia-api] === FIRST KALEM PART 3 ===`);
+            console.log(kalemStr.substring(4000, 6000));
+          }
+          if (kalemStr.length > 6000) {
+            console.log(`[dia-api] === FIRST KALEM PART 4 ===`);
+            console.log(kalemStr.substring(6000, 8000));
+          }
+          
+          console.log(`[dia-api] Total kalem count: ${detailResult.result.m_kalemler.length}`);
+        }
+        
+        // Log m_altlar if exists
+        if (detailResult.result.m_altlar && Array.isArray(detailResult.result.m_altlar) && detailResult.result.m_altlar.length > 0) {
+          console.log(`[dia-api] === M_ALTLAR ===`);
+          console.log(JSON.stringify(detailResult.result.m_altlar).substring(0, 3000));
+        }
+        
+        // Log user ID
+        console.log(`[dia-api] _user: ${detailResult.result._user}, _owner: ${detailResult.result._owner}`);
       }
-      
-      // Log _user field
-      if (detailResult.result && detailResult.result._user) {
-        console.log(`[dia-api] _user: ${detailResult.result._user}`);
-      }
+      // ========== END FULL DATA LOGGING ==========
       
       return new Response(JSON.stringify(detailResult), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
