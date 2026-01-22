@@ -5,6 +5,7 @@ import {
   Building2,
   Wallet,
   CreditCard,
+  ShoppingCart,
   Settings,
   LogOut,
   ChevronLeft,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import type { TransactionType } from "@/types/transaction";
 
 interface SidebarProps {
   activeSection: string;
@@ -22,13 +24,21 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
-const menuItems = [
+interface MenuItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  category?: TransactionType;
+}
+
+const menuItems: MenuItem[] = [
   { id: "dashboard", label: "Özet", icon: LayoutDashboard },
-  { id: "invoices", label: "Faturalar", icon: FileText },
-  { id: "current", label: "Cari Hareketler", icon: Users },
-  { id: "bank", label: "Banka Hareketleri", icon: Building2 },
-  { id: "cash", label: "Kasa Hareketleri", icon: Wallet },
-  { id: "checks", label: "Çek/Senet", icon: CreditCard },
+  { id: "invoice", label: "Faturalar", icon: FileText, category: "invoice" },
+  { id: "order", label: "Siparişler", icon: ShoppingCart, category: "order" },
+  { id: "current_account", label: "Cari Hareketler", icon: Users, category: "current_account" },
+  { id: "bank", label: "Banka Hareketleri", icon: Building2, category: "bank" },
+  { id: "cash", label: "Kasa Hareketleri", icon: Wallet, category: "cash" },
+  { id: "check_note", label: "Çek/Senet", icon: CreditCard, category: "check_note" },
 ];
 
 export function Sidebar({ activeSection, onSectionChange, user, onLogout }: SidebarProps) {
