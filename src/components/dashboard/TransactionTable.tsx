@@ -130,7 +130,7 @@ export function TransactionTable({
                 Belge No
               </th>
               <th className="p-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Açıklama
+                Belge Türü
               </th>
               <th className="p-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Cari
@@ -213,7 +213,15 @@ export function TransactionTable({
                       </div>
                     </td>
                     <td className="p-4">
-                      <p className="text-sm font-medium line-clamp-1">{transaction.description}</p>
+                      {(() => {
+                        const rawData = transaction.details as Record<string, unknown> | undefined;
+                        const turuack = rawData?.turuack as string | undefined;
+                        return (
+                          <p className="text-sm font-medium line-clamp-1">
+                            {turuack || transaction.description || '-'}
+                          </p>
+                        );
+                      })()}
                     </td>
                     <td className="p-4">
                       <p className="text-sm text-muted-foreground">{transaction.counterparty}</p>
