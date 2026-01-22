@@ -144,13 +144,14 @@ const generateMockTransactions = (): Transaction[] => [
 export const mockTransactions = generateMockTransactions();
 
 export const getTransactionGroups = (transactions: Transaction[]): TransactionGroup[] => {
-  const types: TransactionType[] = ['invoice', 'current_account', 'bank', 'cash', 'check_note'];
+  const types: TransactionType[] = ['invoice', 'current_account', 'bank', 'cash', 'check_note', 'order'];
   const labels: Record<TransactionType, string> = {
     invoice: 'Faturalar',
     current_account: 'Cari Hareketler',
     bank: 'Banka Hareketleri',
     cash: 'Kasa Hareketleri',
     check_note: 'Çek/Senet Hareketleri',
+    order: 'Siparişler',
   };
   const icons: Record<TransactionType, string> = {
     invoice: 'FileText',
@@ -158,6 +159,7 @@ export const getTransactionGroups = (transactions: Transaction[]): TransactionGr
     bank: 'Building2',
     cash: 'Wallet',
     check_note: 'CreditCard',
+    order: 'ShoppingCart',
   };
 
   return types.map(type => {

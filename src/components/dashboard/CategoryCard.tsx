@@ -4,6 +4,7 @@ import {
   Building2, 
   Wallet, 
   CreditCard,
+  ShoppingCart,
   ChevronRight
 } from 'lucide-react';
 import { TransactionType } from '@/types/transaction';
@@ -24,6 +25,7 @@ const icons: Record<TransactionType, React.ElementType> = {
   bank: Building2,
   cash: Wallet,
   check_note: CreditCard,
+  order: ShoppingCart,
 };
 
 const colors: Record<TransactionType, string> = {
@@ -32,6 +34,7 @@ const colors: Record<TransactionType, string> = {
   bank: 'bg-violet-500',
   cash: 'bg-amber-500',
   check_note: 'bg-rose-500',
+  order: 'bg-cyan-500',
 };
 
 export function CategoryCard({

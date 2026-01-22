@@ -3,7 +3,8 @@ export type TransactionType =
   | 'current_account' 
   | 'bank' 
   | 'cash' 
-  | 'check_note';
+  | 'check_note'
+  | 'order';
 
 export type TransactionStatus = 
   | 'pending' 
@@ -41,6 +42,7 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   bank: 'Banka Hareketleri',
   cash: 'Kasa Hareketleri',
   check_note: 'Çek/Senet Hareketleri',
+  order: 'Siparişler',
 };
 
 export const TRANSACTION_STATUS_LABELS: Record<TransactionStatus, string> = {
