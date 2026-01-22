@@ -6,12 +6,22 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currency: string = 'TRY'): string {
+  // DIA returns "TL" but Intl expects "TRY"
+  const currencyCode = currency === 'TL' ? 'TRY' : currency;
+  
   return new Intl.NumberFormat('tr-TR', {
     style: 'currency',
-    currency,
+    currency: currencyCode,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+export function formatExchangeRate(rate: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  }).format(rate);
 }
 
 export function formatDate(dateString: string): string {
