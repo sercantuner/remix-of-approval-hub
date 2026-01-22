@@ -26,6 +26,15 @@ export interface Transaction {
   diaRecordId?: string;
   attachmentUrl?: string;
   details?: Record<string, unknown>;
+
+  /**
+   * UI-only grouping support (used for bank slips that come as multiple movements).
+   * When present, actions (approve/reject) should be applied to these underlying DB row ids.
+   */
+  sourceTransactionIds?: string[];
+
+  /** Number of movements inside the grouped transaction (mainly for bank). */
+  movementCount?: number;
 }
 
 export interface TransactionGroup {
