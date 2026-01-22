@@ -85,6 +85,8 @@ const FIELD_LABELS: Record<string, string> = {
   kalemturu: 'Kalem Türü',
   turu: 'Türü',
   etkin: 'Etkin',
+  cari: 'Cari',
+  kur: 'Kur',
 };
 
 // Fields to hide from display
@@ -158,6 +160,18 @@ function flattenLineItem(item: Record<string, unknown>, transactionType: string)
     flat.aciklama = kalemTuruAciklama || item.turuack || stokAdi || item.aciklama || '-';
   } else if (transactionType === 'invoice') {
     flat.aciklama = kalemTuruAciklama || item.turutxt || stokAdi || item.aciklama || '-';
+  } else if (transactionType === 'bank') {
+    // For bank transactions, get cari (customer) and banka (bank account) from nested objects
+    const cariKart = item._key_scf_cari as Record<string, unknown> | undefined;
+    const bankaHesabi = item._key_bcs_bankahesabi as Record<string, unknown> | undefined;
+    const doviz = item._key_sis_doviz as Record<string, unknown> | undefined;
+    
+    flat.cari = cariKart?.unvan || item.aciklama || '-';
+    flat.banka = bankaHesabi?.hesapadi || bankaHesabi?.hesapkodu || '-';
+    flat.doviz = doviz?.adi || item.dovizturu || 'TL';
+    flat.kur = item.dovizkuru || '1.000000';
+    flat.borc = item.borc || '0';
+    flat.alacak = item.alacak || '0';
   } else {
     flat.aciklama = kalemTuruAciklama || stokAdi || item.aciklama || '-';
   }
@@ -196,13 +210,14 @@ function flattenLineItem(item: Record<string, unknown>, transactionType: string)
 function getLineItemColumns(type: string, items: Record<string, unknown>[]): string[] {
   if (!items.length) return [];
   
-  // Exact columns for invoice and order - only show these specific columns
+  // Exact columns for each transaction type - only show these specific columns
   const exactColumns: Record<string, string[]> = {
     order: ['aciklama', 'miktar', 'birim', 'birimfiyat', 'tutar', 'iskonto', 'kdv', 'net'],
     invoice: ['aciklama', 'miktar', 'birim', 'birimfiyat', 'tutar', 'iskonto', 'kdv', 'net'],
+    bank: ['cari', 'banka', 'borc', 'alacak', 'doviz', 'kur'],
   };
   
-  // For invoice and order, return exact columns (they will be flattened)
+  // For known types, return exact columns (they will be flattened)
   if (exactColumns[type]) {
     return exactColumns[type];
   }
@@ -429,8 +444,8 @@ export function TransactionDetailRow({
             </div>
           </div>
 
-          {/* Main Fields Grid - Hide for invoice and order types */}
-          {!['invoice', 'order'].includes(transaction.type) && mainFields.length > 0 && (
+          {/* Main Fields Grid - Hide for invoice, order, and bank types (show only line items) */}
+          {!['invoice', 'order', 'bank'].includes(transaction.type) && mainFields.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {mainFields.slice(0, 12).map(([key, value]) => (
                 <div key={key} className="bg-background/50 rounded-lg p-2">
@@ -449,7 +464,7 @@ export function TransactionDetailRow({
           {/* Line Items Tables (m_kalemler) */}
           {lineItems.map(([key, items]) => {
             const columns = getLineItemColumns(transaction.type, items as Record<string, unknown>[]);
-            const isInvoiceOrOrder = ['invoice', 'order'].includes(transaction.type);
+            const useExactColumns = ['invoice', 'order', 'bank'].includes(transaction.type);
             
             return (
               <div key={key} className="space-y-2">
@@ -478,8 +493,8 @@ export function TransactionDetailRow({
                     </TableHeader>
                     <TableBody>
                       {(items as Record<string, unknown>[]).map((item, idx) => {
-                        // Flatten nested fields for invoice/order types
-                        const flatItem = isInvoiceOrOrder 
+                        // Flatten nested fields for types with exact columns
+                        const flatItem = useExactColumns 
                           ? flattenLineItem(item, transaction.type) 
                           : item;
                         return (
