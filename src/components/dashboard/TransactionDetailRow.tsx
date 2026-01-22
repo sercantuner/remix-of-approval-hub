@@ -142,14 +142,24 @@ function isCurrencyField(fieldName: string): boolean {
 }
 
 // Flatten nested line item fields from DIA API
-function flattenLineItem(item: Record<string, unknown>): Record<string, unknown> {
+function flattenLineItem(item: Record<string, unknown>, transactionType: string): Record<string, unknown> {
   const flat: Record<string, unknown> = { ...item };
   
-  // _key_kalemturu.aciklama -> aciklama
-  if (item._key_kalemturu && typeof item._key_kalemturu === 'object') {
-    const kalemTuru = item._key_kalemturu as Record<string, unknown>;
-    if (kalemTuru.aciklama) {
-      flat.aciklama = kalemTuru.aciklama;
+  // For orders: use turuack (Verilen Sipariş / Alınan Sipariş)
+  // For invoices: use turutxt or aciklama (Satış Faturası, Mal Alım, etc.)
+  if (transactionType === 'order') {
+    // Use turuack field for order type description
+    flat.aciklama = item.turuack || item.aciklama || '-';
+  } else if (transactionType === 'invoice') {
+    // Use turutxt or aciklama for invoice type description
+    flat.aciklama = item.turutxt || item.aciklama || '-';
+  } else {
+    // _key_kalemturu.aciklama -> aciklama
+    if (item._key_kalemturu && typeof item._key_kalemturu === 'object') {
+      const kalemTuru = item._key_kalemturu as Record<string, unknown>;
+      if (kalemTuru.aciklama) {
+        flat.aciklama = kalemTuru.aciklama;
+      }
     }
   }
   
@@ -474,7 +484,7 @@ export function TransactionDetailRow({
                       {(items as Record<string, unknown>[]).map((item, idx) => {
                         // Flatten nested fields for invoice/order types
                         const flatItem = isInvoiceOrOrder 
-                          ? flattenLineItem(item) 
+                          ? flattenLineItem(item, transaction.type) 
                           : item;
                         return (
                           <TableRow key={idx} className="hover:bg-muted/30">
@@ -551,30 +561,45 @@ export function TransactionDetailRow({
             </div>
           )}
 
-          {/* Totals Footer - Only for invoice/order */}
+          {/* Totals Footer - Only for invoice/order - Row by Row with descriptions */}
           {['invoice', 'order'].includes(transaction.type) && (
-            <div className="bg-background rounded-lg border p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <span className="text-xs text-muted-foreground block">Ara Toplam</span>
+            <div className="bg-background rounded-lg border overflow-hidden">
+              <div className="divide-y divide-border">
+                {/* Ara Toplam */}
+                <div className="flex justify-between items-center px-4 py-2">
+                  <span className="text-sm text-muted-foreground">Ara Toplam</span>
                   <span className="text-sm font-medium tabular-nums">
                     {formatValueWithCurrency(totals.toplam, 'toplam', currency)}
                   </span>
                 </div>
-                <div className="text-center">
-                  <span className="text-xs text-muted-foreground block">Toplam İndirim</span>
+                {/* Toplam İndirim */}
+                <div className="flex justify-between items-center px-4 py-2">
+                  <span className="text-sm text-muted-foreground">Toplam İndirim</span>
                   <span className="text-sm font-medium tabular-nums text-orange-600">
                     {formatValueWithCurrency(totals.toplamindirim, 'toplamindirim', currency)}
                   </span>
                 </div>
-                <div className="text-center">
-                  <span className="text-xs text-muted-foreground block">Toplam KDV</span>
+                {/* Ara Toplam (İndirim Sonrası) */}
+                <div className="flex justify-between items-center px-4 py-2">
+                  <span className="text-sm text-muted-foreground">Ara Toplam (İndirim Sonrası)</span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {formatValueWithCurrency(
+                      (Number(totals.toplam || 0) - Number(totals.toplamindirim || 0)),
+                      'toplam',
+                      currency
+                    )}
+                  </span>
+                </div>
+                {/* Toplam KDV */}
+                <div className="flex justify-between items-center px-4 py-2">
+                  <span className="text-sm text-muted-foreground">Toplam KDV</span>
                   <span className="text-sm font-medium tabular-nums">
                     {formatValueWithCurrency(totals.toplamkdv, 'toplamkdv', currency)}
                   </span>
                 </div>
-                <div className="text-center">
-                  <span className="text-xs text-muted-foreground block">Genel Toplam (Net)</span>
+                {/* Genel Toplam (Net) */}
+                <div className="flex justify-between items-center px-4 py-3 bg-muted/30">
+                  <span className="text-sm font-semibold">Genel Toplam (Net)</span>
                   <span className="text-base font-bold tabular-nums text-primary">
                     {formatValueWithCurrency(totals.net, 'net', currency)}
                   </span>
