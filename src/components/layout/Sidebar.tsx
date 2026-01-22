@@ -47,7 +47,7 @@ export function Sidebar({ activeSection, onSectionChange, user, onLogout }: Side
   return (
     <aside
       className={cn(
-        "h-screen gradient-primary flex flex-col transition-all duration-300",
+        "h-screen gradient-primary flex flex-col transition-all duration-300 flex-shrink-0",
         collapsed ? "w-20" : "w-64"
       )}
     >

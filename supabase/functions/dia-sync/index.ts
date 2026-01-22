@@ -36,7 +36,7 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     docField: "fisno", 
     amountField: "borc", 
     dateField: "tarih", 
-    counterpartyField: "unvan",  // unvan alanından al
+    counterpartyField: "cariunvan",  // cariunvan veya unvan alanından al
     codeField: "carikodu"
   },
   bank: { 
@@ -221,10 +221,10 @@ Deno.serve(async (req) => {
         for (const record of records) {
           const diaKey = String(record[mapping.keyField] || record._key);
           
-          // Get counterparty name - prefer unvan field directly
-          let counterparty = record[mapping.counterpartyField] || record.unvan || record.cariunvan || "Bilinmiyor";
+          // Get counterparty name - prefer unvan/cariunvan fields
+          let counterparty = record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
           if (typeof counterparty === "object") {
-            counterparty = counterparty?.unvan || counterparty?.aciklama || "Bilinmiyor";
+            counterparty = counterparty?.unvan || counterparty?.cariunvan || counterparty?.aciklama || "Bilinmiyor";
           }
           
           // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank
