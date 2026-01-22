@@ -10,6 +10,9 @@ import {
   RefreshCw,
   Settings,
   AlertTriangle,
+  Server,
+  Mail,
+  Bell,
 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -17,10 +20,13 @@ import { CategoryCard } from "@/components/dashboard/CategoryCard";
 import { TransactionTable } from "@/components/dashboard/TransactionTable";
 import { TransactionDetailModal } from "@/components/dashboard/TransactionDetailModal";
 import { DiaConnectionForm } from "@/components/settings/DiaConnectionForm";
+import { MailSettingsForm } from "@/components/settings/MailSettingsForm";
+import { NotificationSettingsForm } from "@/components/settings/NotificationSettingsForm";
 import { RejectReasonDialog } from "@/components/dashboard/RejectReasonDialog";
 import { SyncProgress } from "@/components/ui/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { diaSync, diaApprove } from "@/lib/diaApi";
@@ -441,16 +447,48 @@ export default function Dashboard() {
         <main className="flex-1 p-6">
           <header className="mb-6">
             <h1 className="text-2xl font-bold text-foreground">Ayarlar</h1>
-            <p className="text-muted-foreground">Dia ERP bağlantı ayarlarınızı yönetin.</p>
+            <p className="text-muted-foreground">DIA ERP, mail ve bildirim ayarlarınızı yönetin.</p>
           </header>
-          <DiaConnectionForm
-            onSuccess={handleDiaConnectionSuccess}
-            existingConnection={{
-              sunucuAdi: profile?.dia_sunucu_adi,
-              firmaKodu: profile?.dia_firma_kodu,
-              donemKodu: profile?.dia_donem_kodu,
-            }}
-          />
+          
+          <Tabs defaultValue="dia" className="space-y-6">
+            <TabsList className="grid w-full max-w-xl grid-cols-3">
+              <TabsTrigger value="dia" className="gap-2">
+                <Server className="w-4 h-4" />
+                DIA Bağlantısı
+              </TabsTrigger>
+              <TabsTrigger value="mail" className="gap-2">
+                <Mail className="w-4 h-4" />
+                Mail Ayarları
+              </TabsTrigger>
+              <TabsTrigger value="notifications" className="gap-2">
+                <Bell className="w-4 h-4" />
+                Bildirimler
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="dia">
+              <DiaConnectionForm
+                onSuccess={handleDiaConnectionSuccess}
+                existingConnection={{
+                  sunucuAdi: profile?.dia_sunucu_adi,
+                  firmaKodu: profile?.dia_firma_kodu,
+                  donemKodu: profile?.dia_donem_kodu,
+                }}
+              />
+            </TabsContent>
+
+            <TabsContent value="mail">
+              <div className="max-w-xl">
+                <MailSettingsForm />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="notifications">
+              <div className="max-w-xl">
+                <NotificationSettingsForm />
+              </div>
+            </TabsContent>
+          </Tabs>
         </main>
       </div>
     );
