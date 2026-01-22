@@ -227,16 +227,25 @@ Deno.serve(async (req) => {
             counterparty = counterparty?.unvan || counterparty?.aciklama || "Bilinmiyor";
           }
           
-          // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account
+          // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank
           let amount = 0;
           if (txType === "invoice" || txType === "order") {
             // Net tutarı kullan
             amount = parseFloat(record.net) || parseFloat(record[mapping.amountField]) || 0;
           } else if (txType === "current_account") {
-            // Borç/Alacak mantığı
+            // Borç/Alacak mantığı - cari hareketleri
             const borc = parseFloat(record.borc) || 0;
             const alacak = parseFloat(record.alacak) || 0;
-            amount = borc > 0 ? borc : -alacak;
+            amount = borc - alacak;
+          } else if (txType === "bank") {
+            // Banka hareketleri için borç/alacak mantığı
+            const borc = parseFloat(record.borc) || 0;
+            const alacak = parseFloat(record.alacak) || 0;
+            if (borc > 0) {
+              amount = borc;  // Giriş (pozitif)
+            } else if (alacak > 0) {
+              amount = -alacak;  // Çıkış (negatif)
+            }
           } else {
             amount = parseFloat(record[mapping.amountField]) || 0;
           }

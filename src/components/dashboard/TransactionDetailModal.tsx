@@ -4,7 +4,6 @@ import {
   Calendar, 
   Hash, 
   DollarSign,
-  ExternalLink,
   Check,
   X
 } from 'lucide-react';
@@ -111,9 +110,10 @@ export function TransactionDetailModal({
                 <div className="bg-muted rounded-lg h-48 flex items-center justify-center border border-dashed">
                   <div className="text-center">
                     <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                    <Button variant="outline" size="sm">
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                      Belgeyi Görüntüle
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={transaction.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                        Belgeyi Görüntüle
+                      </a>
                     </Button>
                   </div>
                 </div>
@@ -121,17 +121,6 @@ export function TransactionDetailModal({
             </>
           )}
 
-          {/* Dia Link */}
-          <div className="bg-primary/5 rounded-lg p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Dia ERP Kaydı</p>
-              <p className="text-xs text-muted-foreground">ID: {transaction.diaRecordId}</p>
-            </div>
-            <Button variant="outline" size="sm">
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Dia'da Aç
-            </Button>
-          </div>
         </div>
 
         <DialogFooter className="gap-2">
