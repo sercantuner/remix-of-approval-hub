@@ -10,7 +10,7 @@ interface DiaLoginParams {
 }
 
 interface DiaApiParams {
-  action: "list" | "list_detail" | "create" | "update" | "delete" | "approve" | "reject";
+  action: "list" | "list_detail" | "list_users" | "create" | "update" | "delete" | "approve" | "reject";
   module: string;
   filters?: Array<{ field: string; operator: string; value: string }>;
   sorts?: Array<{ field: string; sorttype: "ASC" | "DESC" }>;
@@ -109,4 +109,65 @@ export async function diaFetchDetail(transactionType: string, recordKey: string)
   }
 
   return response.data;
+}
+
+// User list cache - stored in memory
+let userListCache: Record<number, string> | null = null;
+let userListLoading = false;
+let userListPromise: Promise<Record<number, string>> | null = null;
+
+export async function diaFetchUserList(): Promise<Record<number, string>> {
+  // Return from cache if available
+  if (userListCache) {
+    return userListCache;
+  }
+
+  // If already loading, wait for the existing promise
+  if (userListLoading && userListPromise) {
+    return userListPromise;
+  }
+
+  userListLoading = true;
+
+  userListPromise = (async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await supabase.functions.invoke("dia-api", {
+        body: {
+          action: "list_users",
+          module: "sis",
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      // Build user map from response
+      const users: Record<number, string> = {};
+      const userList = response.data?.result || [];
+      for (const user of userList) {
+        if (user._key && user.gercekadi) {
+          users[user._key] = user.gercekadi;
+        } else if (user._key && user.kullaniciadi) {
+          users[user._key] = user.kullaniciadi;
+        }
+      }
+
+      userListCache = users;
+      return users;
+    } finally {
+      userListLoading = false;
+    }
+  })();
+
+  return userListPromise;
+}
+
+export function getCachedUserName(userId: number): string | null {
+  return userListCache?.[userId] || null;
 }

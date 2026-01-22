@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface DiaApiRequest {
-  action: "list" | "list_detail" | "create" | "update" | "delete" | "approve" | "reject";
+  action: "list" | "list_detail" | "list_users" | "create" | "update" | "delete" | "approve" | "reject";
   module: string; // e.g., "scf_fatura", "scf_carihesap_fisi", "bcs_bankahesap_fisi"
   filters?: Array<{ field: string; operator: string; value: string }>;
   sorts?: Array<{ field: string; sorttype: "ASC" | "DESC" }>;
@@ -256,6 +256,37 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "No valid DIA session. Please login to DIA first." }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Handle list_users action - fetch all users for name resolution
+    if (request.action === "list_users") {
+      const diaUserUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
+      const userPayload = {
+        sis_kullanici_listele: {
+          session_id: session.session_id,
+          firma_kodu: session.firma_kodu,
+          donem_kodu: session.donem_kodu,
+          filters: "",
+          sorts: "",
+          params: "",
+          limit: 0,
+          offset: 0,
+        },
+      };
+
+      console.log(`[dia-api] Fetching user list from ${diaUserUrl}`);
+
+      const userResponse = await fetch(diaUserUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(userPayload),
+      });
+
+      const userResult = await userResponse.json();
+      
+      return new Response(JSON.stringify(userResult), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Handle list_detail action separately
