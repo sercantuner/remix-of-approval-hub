@@ -1,26 +1,20 @@
 import { useState, useEffect } from 'react';
 import { 
   FileText, 
-  Building2, 
-  Calendar, 
-  Hash, 
-  DollarSign,
-  Check,
-  X,
   ExternalLink,
   Loader2,
   Package,
-  Banknote
+  Tag,
+  User
 } from 'lucide-react';
-import { Transaction, TRANSACTION_TYPE_LABELS, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
-import { formatCurrency, formatDate, formatExchangeRate } from '@/lib/utils';
-import { diaFetchDetail } from '@/lib/diaApi';
+import { Transaction, TRANSACTION_TYPE_LABELS } from '@/types/transaction';
+import { formatCurrency, formatExchangeRate } from '@/lib/utils';
+import { diaFetchDetail, diaFetchUserList, getCachedUserName } from '@/lib/diaApi';
 
 // Currency-related fields that should be formatted as money
-const CURRENCY_FIELDS = ['tutar', 'tutari', 'birimfiyat', 'birimfiyati', 'sonbirimfiyati', 'net', 'kdv', 'kdvtutar', 'kdvtutari', 'iskonto', 'iskontotutar', 'indirimtutari', 'indirimtoplam', 'toplam', 'toplamtutar', 'borc', 'alacak', 'bakiye', 'fiyat'];
+const CURRENCY_FIELDS = ['tutar', 'tutari', 'birimfiyat', 'birimfiyati', 'sonbirimfiyati', 'net', 'kdv', 'kdvtutar', 'kdvtutari', 'iskonto', 'iskontotutar', 'indirimtutari', 'indirimtoplam', 'toplam', 'toplamtutar', 'borc', 'alacak', 'bakiye', 'fiyat', 'deger'];
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -28,6 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 
@@ -85,16 +80,29 @@ const FIELD_LABELS: Record<string, string> = {
   fiyat: 'Fiyat',
   adet: 'Adet',
   m_kalemler: 'Kalemler',
+  m_altlar: 'İndirim/Masraflar',
+  deger: 'Değer',
+  kalemturu: 'Kalem Türü',
+  turu: 'Türü',
+  etkin: 'Etkin',
 };
 
 // Fields to hide from display
 const HIDDEN_FIELDS = ['_key', 'session_id', 'firma_kodu', 'donem_kodu', '__firmaadi', 'kalemler', 'satirlar', 'detaylar', 'hareketler'];
 
-// Fields that contain line items (arrays)
-const LINE_ITEM_FIELDS = ['kalemler', 'satirlar', 'detaylar', 'hareketler'];
-
 // Priority fields to show first
 const PRIORITY_FIELDS = ['belgeno', 'belgeno2', 'belgetarihi', 'vadetarihi', 'cariunvan', '__carifirma', 'net', 'toplamtutar', 'kdvtutar', 'aciklama'];
+
+// Kalem türü açıklamaları
+const KALEM_TURU_LABELS: Record<string, string> = {
+  'INDR': 'İndirim',
+  'MSRF': 'Masraf',
+  'NVL': 'Navlun',
+  'KMS': 'Komisyon',
+  'STJ': 'Stopaj',
+  'OTV': 'ÖTV',
+  'SSDF': 'SSDF',
+};
 
 function getFieldLabel(field: string): string {
   return FIELD_LABELS[field.toLowerCase()] || field;
@@ -165,10 +173,9 @@ function flattenLineItem(item: Record<string, unknown>): Record<string, unknown>
 }
 
 // Get columns for line items table based on transaction type
-function getLineItemColumns(type: string, items: Record<string, unknown>[], useFlattened: boolean = false): string[] {
+function getLineItemColumns(type: string, items: Record<string, unknown>[]): string[] {
   if (!items.length) return [];
   
-  // For invoice/order, we use flattened columns directly since we normalize the data
   // Exact columns for invoice and order - only show these specific columns
   const exactColumns: Record<string, string[]> = {
     order: ['aciklama', 'miktar', 'birim', 'birimfiyat', 'tutar', 'iskonto', 'kdv', 'net'],
@@ -190,7 +197,6 @@ function getLineItemColumns(type: string, items: Record<string, unknown>[], useF
     check_note: ['ceksenetkodu', 'vadetarihi', 'tutar', 'portfoydurumu', 'kesideci'],
   };
 
-
   // For other types, use priority columns with fallback
   const priority = priorityColumns[type] || [];
   const orderedColumns: string[] = [];
@@ -211,6 +217,30 @@ function getLineItemColumns(type: string, items: Record<string, unknown>[], useF
   return orderedColumns.slice(0, 8);
 }
 
+// Get user name from nested _key_sis_kullanici_onaylayan object or from cache
+function resolveUserName(detailData: Record<string, unknown>, userId: number | undefined): string | null {
+  if (!userId) return null;
+  
+  // First try to get from nested object in m_kalemler
+  const mKalemler = detailData.m_kalemler as Record<string, unknown>[] | undefined;
+  if (mKalemler && mKalemler.length > 0) {
+    const firstKalem = mKalemler[0];
+    const onaylayan = firstKalem._key_sis_kullanici_onaylayan as Record<string, unknown> | undefined;
+    if (onaylayan && onaylayan._key === userId && onaylayan.gercekadi) {
+      return String(onaylayan.gercekadi);
+    }
+  }
+  
+  // Try from _key_scf_satiselemani
+  const satisElemani = detailData._key_scf_satiselemani as Record<string, unknown> | undefined;
+  if (satisElemani && satisElemani._key === userId && satisElemani.aciklama) {
+    return String(satisElemani.aciklama);
+  }
+  
+  // Try from cache
+  return getCachedUserName(userId);
+}
+
 export function TransactionDetailRow({
   transaction,
   onApprove,
@@ -219,6 +249,14 @@ export function TransactionDetailRow({
   const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userNames, setUserNames] = useState<Record<number, string>>({});
+
+  // Fetch user list on mount (only once)
+  useEffect(() => {
+    diaFetchUserList()
+      .then(users => setUserNames(users))
+      .catch(err => console.warn('[TransactionDetailRow] Failed to fetch user list:', err));
+  }, []);
 
   useEffect(() => {
     if (transaction?.diaRecordId) {
@@ -226,7 +264,6 @@ export function TransactionDetailRow({
       setError(null);
 
       // Extract _key from diaRecordId (format: "method_name-key", e.g., "scf_fatura_listele-2440413")
-      // We need to get the last part after the last hyphen
       const lastHyphenIndex = transaction.diaRecordId.lastIndexOf('-');
       const recordKey = lastHyphenIndex !== -1 
         ? transaction.diaRecordId.substring(lastHyphenIndex + 1) 
@@ -237,9 +274,6 @@ export function TransactionDetailRow({
       diaFetchDetail(transaction.type, recordKey)
         .then((data) => {
           console.log('[TransactionDetailRow] DIA response:', data);
-          // DIA may return data in different formats:
-          // - scf_fatura_getir returns result as object directly
-          // - other methods may return result as array
           let result = null;
           if (data?.result) {
             result = Array.isArray(data.result) ? data.result[0] : data.result;
@@ -266,6 +300,15 @@ export function TransactionDetailRow({
   // Separate main fields from line items
   const mainFields: [string, unknown][] = [];
   const lineItems: [string, unknown[]][] = [];
+  const mAltlar: Record<string, unknown>[] = [];
+  
+  // Extract totals for footer
+  const totals = {
+    toplam: detailData?.toplam || detailData?.toplamdvz,
+    toplamindirim: detailData?.toplamindirim || detailData?.toplamindirimdvz,
+    toplamkdv: detailData?.toplamkdv || detailData?.toplamkdvdvz,
+    net: detailData?.net || detailData?.netdvz,
+  };
 
   if (detailData) {
     // Sort fields by priority
@@ -275,6 +318,12 @@ export function TransactionDetailRow({
 
     entries.forEach(([key, value]) => {
       if (isHiddenField(key)) return;
+      
+      // Handle m_altlar separately
+      if (key === 'm_altlar' && Array.isArray(value)) {
+        mAltlar.push(...value as Record<string, unknown>[]);
+        return;
+      }
       
       if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
         lineItems.push([key, value]);
@@ -296,6 +345,12 @@ export function TransactionDetailRow({
 
     mainFields.push(...priorityEntries, ...otherEntries);
   }
+  
+  // Get user name
+  const userId = detailData?._user as number | undefined;
+  const userName = resolveUserName(detailData || {}, userId) || (userId ? userNames[userId] : null);
+
+  const currency = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
 
   return (
     <div className="bg-muted/30 border-t border-b border-muted p-4 animate-in slide-in-from-top-2 duration-200">
@@ -320,12 +375,12 @@ export function TransactionDetailRow({
               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                 <FileText className="w-4 h-4 text-primary" />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium">{TRANSACTION_TYPE_LABELS[transaction.type]}</span>
                 <span className="text-sm text-muted-foreground">#{transaction.documentNo}</span>
                 {/* Currency Badge */}
                 <Badge variant="outline" className="ml-1 text-xs">
-                  {(detailData?.dovizturu as string) || transaction.currency || 'TL'}
+                  {currency}
                 </Badge>
                 {/* Exchange Rate */}
                 {detailData?.dovizkuru && parseFloat(String(detailData.dovizkuru)) !== 1 && (
@@ -334,9 +389,10 @@ export function TransactionDetailRow({
                   </span>
                 )}
                 {/* Recording User */}
-                {detailData?._user && (
-                  <span className="text-xs text-muted-foreground ml-2">
-                    Kaydeden: #{String(detailData._user)}
+                {userName && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <User className="w-3 h-3" />
+                    {userName}
                   </span>
                 )}
               </div>
@@ -370,27 +426,24 @@ export function TransactionDetailRow({
           {/* Main Fields Grid - Hide for invoice and order types */}
           {!['invoice', 'order'].includes(transaction.type) && mainFields.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {mainFields.slice(0, 12).map(([key, value]) => {
-                const currency = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
-                return (
-                  <div key={key} className="bg-background/50 rounded-lg p-2">
-                    <span className="text-xs text-muted-foreground block">{getFieldLabel(key)}</span>
-                    <span className={cn(
-                      "text-sm font-medium truncate block",
-                      isCurrencyField(key) && "tabular-nums"
-                    )} title={formatValueWithCurrency(value, key, currency)}>
-                      {formatValueWithCurrency(value, key, currency)}
-                    </span>
-                  </div>
-                );
-              })}
+              {mainFields.slice(0, 12).map(([key, value]) => (
+                <div key={key} className="bg-background/50 rounded-lg p-2">
+                  <span className="text-xs text-muted-foreground block">{getFieldLabel(key)}</span>
+                  <span className={cn(
+                    "text-sm font-medium truncate block",
+                    isCurrencyField(key) && "tabular-nums"
+                  )} title={formatValueWithCurrency(value, key, currency)}>
+                    {formatValueWithCurrency(value, key, currency)}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* Line Items Tables */}
+          {/* Line Items Tables (m_kalemler) */}
           {lineItems.map(([key, items]) => {
             const columns = getLineItemColumns(transaction.type, items as Record<string, unknown>[]);
-            const currency = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
+            const isInvoiceOrOrder = ['invoice', 'order'].includes(transaction.type);
             
             return (
               <div key={key} className="space-y-2">
@@ -420,7 +473,7 @@ export function TransactionDetailRow({
                     <TableBody>
                       {(items as Record<string, unknown>[]).map((item, idx) => {
                         // Flatten nested fields for invoice/order types
-                        const flatItem = ['invoice', 'order'].includes(transaction.type) 
+                        const flatItem = isInvoiceOrOrder 
                           ? flattenLineItem(item) 
                           : item;
                         return (
@@ -445,6 +498,90 @@ export function TransactionDetailRow({
               </div>
             );
           })}
+
+          {/* m_altlar Table (Discounts/Surcharges) - Only for invoice/order */}
+          {['invoice', 'order'].includes(transaction.type) && mAltlar.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  İndirim/Masraflar ({mAltlar.length} kalem)
+                </span>
+              </div>
+              <div className="bg-background rounded-lg overflow-hidden border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-xs font-medium py-2 px-3">Kalem Türü</TableHead>
+                      <TableHead className="text-xs font-medium py-2 px-3 text-right">Değer</TableHead>
+                      <TableHead className="text-xs font-medium py-2 px-3 text-right">Tutar</TableHead>
+                      <TableHead className="text-xs font-medium py-2 px-3 text-right">KDV</TableHead>
+                      <TableHead className="text-xs font-medium py-2 px-3">Açıklama</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mAltlar.map((alt, idx) => {
+                      const kalemTuru = alt.kalemturu as string;
+                      const kalemTuruLabel = KALEM_TURU_LABELS[kalemTuru] || kalemTuru || '-';
+                      return (
+                        <TableRow key={idx} className="hover:bg-muted/30">
+                          <TableCell className="text-xs py-2 px-3">
+                            <Badge variant="secondary" className="text-xs">
+                              {kalemTuruLabel}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs py-2 px-3 text-right tabular-nums">
+                            {formatValueWithCurrency(alt.deger, 'deger', currency)}
+                          </TableCell>
+                          <TableCell className="text-xs py-2 px-3 text-right tabular-nums">
+                            {formatValueWithCurrency(alt.tutar, 'tutar', currency)}
+                          </TableCell>
+                          <TableCell className="text-xs py-2 px-3 text-right tabular-nums">
+                            {formatValueWithCurrency(alt.kdv, 'kdv', currency)}
+                          </TableCell>
+                          <TableCell className="text-xs py-2 px-3 text-muted-foreground">
+                            {String(alt.note || '-')}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {/* Totals Footer - Only for invoice/order */}
+          {['invoice', 'order'].includes(transaction.type) && (
+            <div className="bg-background rounded-lg border p-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <span className="text-xs text-muted-foreground block">Ara Toplam</span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {formatValueWithCurrency(totals.toplam, 'toplam', currency)}
+                  </span>
+                </div>
+                <div className="text-center">
+                  <span className="text-xs text-muted-foreground block">Toplam İndirim</span>
+                  <span className="text-sm font-medium tabular-nums text-orange-600">
+                    {formatValueWithCurrency(totals.toplamindirim, 'toplamindirim', currency)}
+                  </span>
+                </div>
+                <div className="text-center">
+                  <span className="text-xs text-muted-foreground block">Toplam KDV</span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {formatValueWithCurrency(totals.toplamkdv, 'toplamkdv', currency)}
+                  </span>
+                </div>
+                <div className="text-center">
+                  <span className="text-xs text-muted-foreground block">Genel Toplam (Net)</span>
+                  <span className="text-base font-bold tabular-nums text-primary">
+                    {formatValueWithCurrency(totals.net, 'net', currency)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
