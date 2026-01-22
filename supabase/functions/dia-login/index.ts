@@ -113,9 +113,9 @@ Deno.serve(async (req) => {
     const diaResult = JSON.parse(responseText);
     console.log("[dia-login] DIA parsed response:", JSON.stringify(diaResult));
 
-    // Check for successful login
-    if (diaResult.login?.session_id) {
-      const sessionId = diaResult.login.session_id;
+    // Check for successful login - DIA returns: { code: "200", msg: "session_id", warnings: [] }
+    if (diaResult.code === "200" && diaResult.msg) {
+      const sessionId = diaResult.msg;
       // DIA sessions typically expire in 30 minutes
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
@@ -152,9 +152,9 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else {
-      // Login failed
-      const errorMessage = diaResult.error?.message || diaResult.login?.error || "DIA login failed";
-      console.error("[dia-login] DIA login failed:", errorMessage);
+      // Login failed - DIA returns error in msg field when code is not "200"
+      const errorMessage = diaResult.msg || diaResult.error?.message || "DIA login failed";
+      console.error("[dia-login] DIA login failed:", errorMessage, "Code:", diaResult.code);
       
       return new Response(
         JSON.stringify({ success: false, error: errorMessage }),
