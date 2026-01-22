@@ -408,13 +408,6 @@ export function TransactionDetailRow({
                   Kur: {formatExchangeRate(parseFloat(String(detailData.dovizkuru)))}
                 </span>
               )}
-              {/* User name */}
-              {userName && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <User className="w-3 h-3" />
-                  {userName}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2">
               {(efaturaLink || earsivLink) && (
