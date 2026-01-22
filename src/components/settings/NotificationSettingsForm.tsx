@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface NotificationSettings {
   id?: string;
   is_enabled: boolean;
-  notification_hour: number;
+  notification_hours: number[];
   invoice_emails: string[];
   order_emails: string[];
   current_account_emails: string[];
@@ -45,7 +45,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => ({
 export function NotificationSettingsForm() {
   const [settings, setSettings] = useState<NotificationSettings>({
     is_enabled: false,
-    notification_hour: 10,
+    notification_hours: [10],
     invoice_emails: [],
     order_emails: [],
     current_account_emails: [],
@@ -74,7 +74,7 @@ export function NotificationSettingsForm() {
         setSettings({
           id: data.id,
           is_enabled: data.is_enabled,
-          notification_hour: data.notification_hour,
+          notification_hours: data.notification_hours || [10],
           invoice_emails: data.invoice_emails || [],
           order_emails: data.order_emails || [],
           current_account_emails: data.current_account_emails || [],
@@ -88,6 +88,44 @@ export function NotificationSettingsForm() {
 
     loadSettings();
   }, []);
+
+  const handleAddHour = (hour: number) => {
+    if (settings.notification_hours.length >= 3) {
+      toast({
+        title: "Limit",
+        description: "En fazla 3 farklı saat ekleyebilirsiniz.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (settings.notification_hours.includes(hour)) {
+      toast({
+        title: "Zaten Ekli",
+        description: "Bu saat zaten listede.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSettings(prev => ({
+      ...prev,
+      notification_hours: [...prev.notification_hours, hour].sort((a, b) => a - b),
+    }));
+  };
+
+  const handleRemoveHour = (hour: number) => {
+    if (settings.notification_hours.length <= 1) {
+      toast({
+        title: "Minimum",
+        description: "En az 1 saat belirlenmeli.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSettings(prev => ({
+      ...prev,
+      notification_hours: prev.notification_hours.filter(h => h !== hour),
+    }));
+  };
 
   const handleAddEmail = (category: CategoryConfig['key']) => {
     const email = emailInputs[category]?.trim();
@@ -144,7 +182,7 @@ export function NotificationSettingsForm() {
       const payload = {
         user_id: session.user.id,
         is_enabled: settings.is_enabled,
-        notification_hour: settings.notification_hour,
+        notification_hours: settings.notification_hours,
         invoice_emails: settings.invoice_emails,
         order_emails: settings.order_emails,
         current_account_emails: settings.current_account_emails,
@@ -197,7 +235,7 @@ export function NotificationSettingsForm() {
           Otomatik Bildirimler
         </CardTitle>
         <CardDescription>
-          Belirlenen saatte onay bekleyen işlemler için otomatik mail bildirimi alın.
+          Belirlenen saatlerde onay bekleyen işlemler için otomatik mail bildirimi alın.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -208,7 +246,7 @@ export function NotificationSettingsForm() {
               Bildirimleri Aktifleştir
             </Label>
             <p className="text-sm text-muted-foreground">
-              Her gün belirlenen saatte otomatik bildirim gönderilir
+              Her gün belirlenen saatlerde otomatik bildirim gönderilir
             </p>
           </div>
           <Switch
@@ -219,28 +257,58 @@ export function NotificationSettingsForm() {
           />
         </div>
 
-        {/* Notification Hour */}
-        <div className="space-y-2">
+        {/* Notification Hours - Multiple Selection */}
+        <div className="space-y-3">
           <Label className="flex items-center gap-2">
             <Clock className="w-4 h-4" />
-            Bildirim Saati
+            Bildirim Saatleri (1-3 saat)
           </Label>
-          <Select
-            value={settings.notification_hour.toString()}
-            onValueChange={(v) => setSettings(prev => ({ ...prev, notification_hour: parseInt(v) }))}
-            disabled={isLoading || !settings.is_enabled}
-          >
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {HOURS.map(h => (
-                <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          
+          {/* Selected hours */}
+          <div className="flex flex-wrap gap-2">
+            {settings.notification_hours.map(hour => (
+              <Badge 
+                key={hour} 
+                variant="secondary" 
+                className="gap-1 pr-1 text-sm py-1"
+              >
+                {hour.toString().padStart(2, "0")}:00
+                <button
+                  type="button"
+                  onClick={() => handleRemoveHour(hour)}
+                  className="ml-1 hover:bg-muted rounded p-0.5"
+                  disabled={isLoading || !settings.is_enabled}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+
+          {/* Add hour selector */}
+          {settings.notification_hours.length < 3 && (
+            <div className="flex gap-2 items-center">
+              <Select
+                onValueChange={(v) => handleAddHour(parseInt(v))}
+                disabled={isLoading || !settings.is_enabled}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Saat ekle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {HOURS.filter(h => !settings.notification_hours.includes(parseInt(h.value))).map(h => (
+                    <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">
+                {3 - settings.notification_hours.length} saat daha ekleyebilirsiniz
+              </span>
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground">
-            Her gün saat {settings.notification_hour.toString().padStart(2, "0")}:00'da bildirim gönderilir
+            Bildirimler şu saatlerde gönderilecek: {settings.notification_hours.map(h => `${h.toString().padStart(2, "0")}:00`).join(", ")}
           </p>
         </div>
 
