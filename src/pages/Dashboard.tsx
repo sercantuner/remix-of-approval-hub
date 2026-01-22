@@ -49,6 +49,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeCategory, setActiveCategory] = useState<TransactionType | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected" | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -190,7 +191,15 @@ export default function Dashboard() {
   }, [pendingTransactions]);
 
   const filteredTransactions = useMemo(() => {
-    let filtered = pendingTransactions;
+    let filtered = transactions;
+
+    // Status filter
+    if (statusFilter) {
+      filtered = filtered.filter((t) => t.status === statusFilter);
+    } else {
+      // Default: show pending
+      filtered = filtered.filter((t) => t.status === "pending");
+    }
 
     if (activeCategory) {
       filtered = filtered.filter((t) => t.type === activeCategory);
@@ -207,7 +216,7 @@ export default function Dashboard() {
     }
 
     return filtered;
-  }, [pendingTransactions, activeCategory, searchQuery]);
+  }, [transactions, statusFilter, activeCategory, searchQuery]);
 
   const stats = useMemo(() => {
     const approved = transactions.filter((t) => t.status === "approved").length;
@@ -221,7 +230,10 @@ export default function Dashboard() {
   const handleApprove = async (ids: string[]) => {
     try {
       await diaApprove(ids, "approve");
-      await loadTransactions();
+      // Update local state immediately without removing from list
+      setTransactions(prev => 
+        prev.map(t => ids.includes(t.id) ? { ...t, status: "approved" as const } : t)
+      );
       setSelectedIds([]);
       setSelectedTransaction(null);
       toast({
@@ -240,7 +252,10 @@ export default function Dashboard() {
   const handleReject = async (ids: string[]) => {
     try {
       await diaApprove(ids, "reject");
-      await loadTransactions();
+      // Update local state immediately without removing from list
+      setTransactions(prev => 
+        prev.map(t => ids.includes(t.id) ? { ...t, status: "rejected" as const } : t)
+      );
       setSelectedIds([]);
       setSelectedTransaction(null);
       toast({
@@ -461,14 +476,28 @@ export default function Dashboard() {
         <div className="p-6 space-y-6">
           {/* Stats Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="Bekleyen İşlemler" value={stats.pending} icon={Clock} variant="primary" />
+            <StatCard 
+              title="Bekleyen İşlemler" 
+              value={stats.pending} 
+              icon={Clock} 
+              variant={statusFilter === null ? "primary" : "default"}
+              onClick={() => setStatusFilter(null)}
+            />
             <StatCard
               title="Onaylanan"
               value={stats.approved}
               icon={CheckCircle}
               trend={{ value: 12, isPositive: true }}
+              variant={statusFilter === "approved" ? "primary" : "default"}
+              onClick={() => setStatusFilter(statusFilter === "approved" ? null : "approved")}
             />
-            <StatCard title="Reddedilen" value={stats.rejected} icon={XCircle} />
+            <StatCard 
+              title="Reddedilen" 
+              value={stats.rejected} 
+              icon={XCircle}
+              variant={statusFilter === "rejected" ? "primary" : "default"}
+              onClick={() => setStatusFilter(statusFilter === "rejected" ? null : "rejected")}
+            />
             <StatCard title="Toplam İşlem" value={stats.total} icon={ClipboardCheck} />
           </div>
 
@@ -517,7 +546,9 @@ export default function Dashboard() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold">
-                  {activeCategory
+                  {statusFilter === "approved" ? "Onaylanan İşlemler" :
+                   statusFilter === "rejected" ? "Reddedilen İşlemler" :
+                   activeCategory
                     ? groups.find((g) => g.type === activeCategory)?.label
                     : "Tüm Onay Bekleyen İşlemler"}
                 </h2>

@@ -47,7 +47,7 @@ export function Sidebar({ activeSection, onSectionChange, user, onLogout }: Side
   return (
     <aside
       className={cn(
-        "h-screen gradient-primary flex flex-col transition-all duration-300 flex-shrink-0",
+        "min-h-screen gradient-primary flex flex-col transition-all duration-300 flex-shrink-0",
         collapsed ? "w-20" : "w-64"
       )}
     >
@@ -65,7 +65,7 @@ export function Sidebar({ activeSection, onSectionChange, user, onLogout }: Side
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {menuItems.map((item) => (
           <button
             key={item.id}
@@ -82,8 +82,8 @@ export function Sidebar({ activeSection, onSectionChange, user, onLogout }: Side
         ))}
       </nav>
 
-      {/* User Section */}
-      <div className="p-3 border-t border-sidebar-border/30">
+      {/* User Section - pushed to bottom */}
+      <div className="mt-auto p-3 border-t border-sidebar-border/30">
         <button
           onClick={() => onSectionChange("settings")}
           className={cn(
