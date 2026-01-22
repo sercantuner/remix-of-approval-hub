@@ -24,9 +24,9 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     endpoint: "scf/json",
     keyField: "_key", 
     docField: "fisno", 
-    amountField: "geneltoplam", 
+    amountField: "net",  // net tutarı kullan
     dateField: "tarih", 
-    counterpartyField: "cariunvan",
+    counterpartyField: "unvan",  // unvan alanından al
     codeField: "__carikartkodu"
   },
   current_account: { 
@@ -36,7 +36,7 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     docField: "fisno", 
     amountField: "borc", 
     dateField: "tarih", 
-    counterpartyField: "cariunvan",
+    counterpartyField: "unvan",  // unvan alanından al
     codeField: "carikodu"
   },
   bank: { 
@@ -64,9 +64,9 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     endpoint: "scf/json",
     keyField: "_key", 
     docField: "siparisno", 
-    amountField: "toplam_tutar", 
+    amountField: "net",  // net tutarı kullan
     dateField: "tarih", 
-    counterpartyField: "cariunvan",
+    counterpartyField: "unvan",  // unvan alanından al
     codeField: "__carikodu",
     approvalField: "onay_txt"
   },
@@ -221,19 +221,24 @@ Deno.serve(async (req) => {
         for (const record of records) {
           const diaKey = String(record[mapping.keyField] || record._key);
           
-          // Get counterparty name - prefer unvan field, fallback to aciklama
-          let counterparty = record[mapping.counterpartyField] || "Bilinmiyor";
+          // Get counterparty name - prefer unvan field directly
+          let counterparty = record[mapping.counterpartyField] || record.unvan || record.cariunvan || "Bilinmiyor";
           if (typeof counterparty === "object") {
             counterparty = counterparty?.unvan || counterparty?.aciklama || "Bilinmiyor";
           }
           
-          // Get amount - handle both positive amounts and borc/alacak fields
-          let amount = parseFloat(record[mapping.amountField]) || 0;
-          if (txType === "current_account" && record.alacak) {
-            // For current account, if alacak exists and borc is 0, use alacak as negative
-            if (amount === 0 && parseFloat(record.alacak) > 0) {
-              amount = -parseFloat(record.alacak);
-            }
+          // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account
+          let amount = 0;
+          if (txType === "invoice" || txType === "order") {
+            // Net tutarı kullan
+            amount = parseFloat(record.net) || parseFloat(record[mapping.amountField]) || 0;
+          } else if (txType === "current_account") {
+            // Borç/Alacak mantığı
+            const borc = parseFloat(record.borc) || 0;
+            const alacak = parseFloat(record.alacak) || 0;
+            amount = borc > 0 ? borc : -alacak;
+          } else {
+            amount = parseFloat(record[mapping.amountField]) || 0;
           }
           
           // Get currency
@@ -244,6 +249,12 @@ Deno.serve(async (req) => {
           
           // Get approval status for orders
           const approvalStatus = mapping.approvalField ? record[mapping.approvalField] : null;
+          
+          // Get attachment URL - e-fatura or e-arsiv link
+          let attachmentUrl = null;
+          if (txType === "invoice") {
+            attachmentUrl = record.efatura_link || record.efatura || record["e-arsiv_link"] || record.earsiv_link || record.earsiv || null;
+          }
 
           transactionsToUpsert.push({
             user_id: userId,
@@ -256,6 +267,7 @@ Deno.serve(async (req) => {
             currency,
             transaction_date: record[mapping.dateField] || new Date().toISOString().split("T")[0],
             status: "pending",
+            attachment_url: attachmentUrl,
             dia_raw_data: record,
           });
         }

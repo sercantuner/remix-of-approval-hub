@@ -48,6 +48,27 @@ export default function Dashboard() {
   const [hasDiaConnection, setHasDiaConnection] = useState<boolean | null>(null);
   const [profile, setProfile] = useState<any>(null);
 
+  // Handle sidebar section change - set category filter based on section
+  const handleSectionChange = (section: string) => {
+    setActiveSection(section);
+    
+    // Map section to transaction type for filtering
+    const sectionToCategory: Record<string, TransactionType | null> = {
+      dashboard: null,
+      invoice: "invoice",
+      order: "order",
+      current_account: "current_account",
+      bank: "bank",
+      cash: "cash",
+      check_note: "check_note",
+      settings: null,
+    };
+    
+    if (section !== "settings") {
+      setActiveCategory(sectionToCategory[section] || null);
+    }
+  };
+
   // Check auth and load data
   useEffect(() => {
     const checkAuthAndLoad = async () => {
@@ -253,7 +274,7 @@ export default function Dashboard() {
       <div className="flex min-h-screen bg-background">
         <Sidebar
           activeSection="settings"
-          onSectionChange={setActiveSection}
+          onSectionChange={handleSectionChange}
           user={user}
           onLogout={handleLogout}
         />
@@ -281,7 +302,7 @@ export default function Dashboard() {
       <div className="flex min-h-screen bg-background">
         <Sidebar
           activeSection={activeSection}
-          onSectionChange={setActiveSection}
+          onSectionChange={handleSectionChange}
           user={user}
           onLogout={handleLogout}
         />
@@ -307,7 +328,7 @@ export default function Dashboard() {
     <div className="flex min-h-screen bg-background">
       <Sidebar
         activeSection={activeSection}
-        onSectionChange={setActiveSection}
+        onSectionChange={handleSectionChange}
         user={user}
         onLogout={handleLogout}
       />
@@ -329,7 +350,7 @@ export default function Dashboard() {
                 <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
                 {isSyncing ? "Senkronize Ediliyor..." : "Senkronize Et"}
               </Button>
-              <Button onClick={() => setActiveSection("settings")} variant="ghost" size="icon">
+              <Button onClick={() => handleSectionChange("settings")} variant="ghost" size="icon">
                 <Settings className="w-5 h-5" />
               </Button>
             </div>
@@ -355,7 +376,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">İşlem Kategorileri</h2>
               {activeCategory && (
-                <Button variant="ghost" size="sm" onClick={() => setActiveCategory(null)}>
+                <Button variant="ghost" size="sm" onClick={() => handleSectionChange("dashboard")}>
                   Tümünü Göster
                 </Button>
               )}
