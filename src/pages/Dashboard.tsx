@@ -235,22 +235,35 @@ export default function Dashboard() {
 
   const handleSync = async () => {
     setIsSyncing(true);
+    const startTime = Date.now();
+    
     toast({
       title: "Senkronizasyon Başlatıldı",
-      description: "Dia ERP ile veriler senkronize ediliyor...",
+      description: "DIA ERP'den veriler çekiliyor...",
     });
 
     try {
-      const result = await diaSync();
+      // 30 saniye timeout ile senkronizasyon
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("timeout")), 30000);
+      });
+      
+      const result = await Promise.race([diaSync(), timeoutPromise]);
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+      
       await loadTransactions();
+      
       toast({
         title: "Senkronizasyon Tamamlandı",
-        description: `${result.synced} işlem senkronize edildi.`,
+        description: `${result.synced} işlem ${duration} saniyede senkronize edildi.`,
       });
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Beklenmeyen hata";
       toast({
         title: "Senkronizasyon Hatası",
-        description: error instanceof Error ? error.message : "Beklenmeyen bir hata oluştu.",
+        description: errorMsg === "timeout" 
+          ? "İşlem zaman aşımına uğradı (30s). Lütfen tekrar deneyin."
+          : errorMsg,
         variant: "destructive",
       });
     } finally {

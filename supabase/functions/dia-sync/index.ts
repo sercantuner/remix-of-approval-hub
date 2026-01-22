@@ -204,101 +204,109 @@ Deno.serve(async (req) => {
     const syncResults: Record<string, any> = {};
     const transactionsToUpsert: any[] = [];
 
-    // Fetch data for each transaction type
-    for (const [txType, mapping] of Object.entries(MODULE_MAPPINGS)) {
+    // Fetch data for each transaction type IN PARALLEL for speed
+    console.log("[dia-sync] Starting parallel fetch for all transaction types");
+    const fetchPromises = Object.entries(MODULE_MAPPINGS).map(async ([txType, mapping]) => {
       try {
         console.log(`[dia-sync] Fetching ${txType} using ${mapping.method}`);
         const result = await fetchDiaData(profile, mapping.method, mapping.endpoint);
-        
-        // DIA API v3 response structure: { code: "200", msg: "", result: [...] }
         const records = result.result || [];
-        
         console.log(`[dia-sync] ${txType}: Found ${records.length} records`);
-        
-        syncResults[txType] = { count: records.length, success: true };
-
-        // Transform and prepare for upsert
-        for (const record of records) {
-          const diaKey = String(record[mapping.keyField] || record._key);
-          
-          // Get counterparty name - prefer __carifirma (fatura), then cariunvan, then unvan
-          let counterparty = record.__carifirma || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
-          if (typeof counterparty === "object") {
-            counterparty = counterparty?.__carifirma || counterparty?.cariunvan || counterparty?.unvan || counterparty?.aciklama || "Bilinmiyor";
-          }
-          
-          // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank
-          let amount = 0;
-          if (txType === "invoice" || txType === "order") {
-            // Net tutarı kullan
-            amount = parseFloat(record.net) || parseFloat(record[mapping.amountField]) || 0;
-          } else if (txType === "current_account") {
-            // Borç/Alacak mantığı - cari hareketleri
-            const borc = parseFloat(record.borc) || 0;
-            const alacak = parseFloat(record.alacak) || 0;
-            amount = borc - alacak;
-          } else if (txType === "bank") {
-            // Banka hareketleri için borç/alacak mantığı
-            const borc = parseFloat(record.borc) || 0;
-            const alacak = parseFloat(record.alacak) || 0;
-            if (borc > 0) {
-              amount = borc;  // Giriş (pozitif)
-            } else if (alacak > 0) {
-              amount = -alacak;  // Çıkış (negatif)
-            }
-          } else {
-            amount = parseFloat(record[mapping.amountField]) || 0;
-          }
-          
-          // Get currency
-          const currency = record.dovizturu || record.doviz || "TRY";
-          
-          // Get document type info
-          const docType = record.turu || record.turuack || null;
-          
-          // Get approval status for orders
-          const approvalStatus = mapping.approvalField ? record[mapping.approvalField] : null;
-          
-          // Get attachment URL - e-fatura or e-arsiv link (doğru alan adları: efaturalinki, earsivlinki)
-          let attachmentUrl = null;
-          if (txType === "invoice") {
-            attachmentUrl = record.efaturalinki || record.earsivlinki || record.efatura_link || record.earsiv_link || null;
-          }
-
-          transactionsToUpsert.push({
-            user_id: userId,
-            dia_record_id: `${mapping.method}-${diaKey}`,
-            transaction_type: txType,
-            document_no: record[mapping.docField] || diaKey,
-            description: record.aciklama || record.not || docType || `${txType} işlemi`,
-            counterparty,
-            amount,
-            currency,
-            transaction_date: record[mapping.dateField] || new Date().toISOString().split("T")[0],
-            status: "pending",
-            attachment_url: attachmentUrl,
-            dia_raw_data: record,
-          });
-        }
+        return { txType, mapping, records, success: true };
       } catch (err) {
         console.error(`[dia-sync] Error fetching ${txType}:`, err);
         const errMessage = err instanceof Error ? err.message : "Unknown error";
-        syncResults[txType] = { count: 0, success: false, error: errMessage };
+        return { txType, mapping, records: [], success: false, error: errMessage };
+      }
+    });
+
+    const fetchResults = await Promise.all(fetchPromises);
+    console.log("[dia-sync] All parallel fetches completed");
+
+    // Process results and build transactions
+    for (const { txType, mapping, records, success, error } of fetchResults) {
+      if (!success) {
+        syncResults[txType] = { count: 0, success: false, error };
+        continue;
+      }
+      
+      syncResults[txType] = { count: records.length, success: true };
+
+      // Transform and prepare for upsert
+      for (const record of records) {
+        const diaKey = String(record[mapping.keyField] || record._key);
+        
+        // Get counterparty name - prefer __carifirma (fatura), then cariunvan, then unvan
+        let counterparty = record.__carifirma || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "Bilinmiyor";
+        if (typeof counterparty === "object") {
+          counterparty = counterparty?.__carifirma || counterparty?.cariunvan || counterparty?.unvan || counterparty?.aciklama || "Bilinmiyor";
+        }
+        
+        // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank
+        let amount = 0;
+        if (txType === "invoice" || txType === "order") {
+          amount = parseFloat(record.net) || parseFloat(record[mapping.amountField]) || 0;
+        } else if (txType === "current_account") {
+          const borc = parseFloat(record.borc) || 0;
+          const alacak = parseFloat(record.alacak) || 0;
+          amount = borc - alacak;
+        } else if (txType === "bank") {
+          const borc = parseFloat(record.borc) || 0;
+          const alacak = parseFloat(record.alacak) || 0;
+          if (borc > 0) {
+            amount = borc;
+          } else if (alacak > 0) {
+            amount = -alacak;
+          }
+        } else {
+          amount = parseFloat(record[mapping.amountField]) || 0;
+        }
+        
+        const currency = record.dovizturu || record.doviz || "TRY";
+        const docType = record.turu || record.turuack || null;
+        const approvalStatus = mapping.approvalField ? record[mapping.approvalField] : null;
+        
+        let attachmentUrl = null;
+        if (txType === "invoice") {
+          attachmentUrl = record.efaturalinki || record.earsivlinki || record.efatura_link || record.earsiv_link || null;
+        }
+
+        transactionsToUpsert.push({
+          user_id: userId,
+          dia_record_id: `${mapping.method}-${diaKey}`,
+          transaction_type: txType,
+          document_no: record[mapping.docField] || diaKey,
+          description: record.aciklama || record.not || docType || `${txType} işlemi`,
+          counterparty,
+          amount,
+          currency,
+          transaction_date: record[mapping.dateField] || new Date().toISOString().split("T")[0],
+          status: "pending",
+          attachment_url: attachmentUrl,
+          dia_raw_data: record,
+        });
       }
     }
 
-    // Upsert all transactions
+    // Upsert transactions in batches for better performance
     if (transactionsToUpsert.length > 0) {
-      const { error: upsertError } = await supabase
-        .from("pending_transactions")
-        .upsert(transactionsToUpsert, {
-          onConflict: "user_id,dia_record_id",
-          ignoreDuplicates: false,
-        });
+      const BATCH_SIZE = 50;
+      console.log(`[dia-sync] Upserting ${transactionsToUpsert.length} transactions in batches of ${BATCH_SIZE}`);
+      
+      for (let i = 0; i < transactionsToUpsert.length; i += BATCH_SIZE) {
+        const batch = transactionsToUpsert.slice(i, i + BATCH_SIZE);
+        const { error: upsertError } = await supabase
+          .from("pending_transactions")
+          .upsert(batch, {
+            onConflict: "user_id,dia_record_id",
+            ignoreDuplicates: false,
+          });
 
-      if (upsertError) {
-        console.error("[dia-sync] Upsert error:", upsertError);
+        if (upsertError) {
+          console.error(`[dia-sync] Upsert error for batch ${i / BATCH_SIZE + 1}:`, upsertError);
+        }
       }
+      console.log("[dia-sync] All batches upserted");
     }
 
     return new Response(
