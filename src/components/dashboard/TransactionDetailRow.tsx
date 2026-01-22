@@ -160,13 +160,20 @@ export function TransactionDetailRow({
       setIsLoading(true);
       setError(null);
 
-      // Extract _key from diaRecordId (format: "type-key")
-      const parts = transaction.diaRecordId.split('-');
-      const recordKey = parts.length > 1 ? parts.slice(1).join('-') : parts[0];
+      // Extract _key from diaRecordId (format: "method_name-key", e.g., "scf_fatura_listele-2440413")
+      // We need to get the last part after the last hyphen
+      const lastHyphenIndex = transaction.diaRecordId.lastIndexOf('-');
+      const recordKey = lastHyphenIndex !== -1 
+        ? transaction.diaRecordId.substring(lastHyphenIndex + 1) 
+        : transaction.diaRecordId;
+
+      console.log('[TransactionDetailRow] Fetching detail for:', transaction.type, 'key:', recordKey);
 
       diaFetchDetail(transaction.type, recordKey)
         .then((data) => {
-          const result = data?.result?.[0] || data?.msg?.[0] || null;
+          console.log('[TransactionDetailRow] DIA response:', data);
+          // DIA may return data in different formats: result[], msg[], or directly as object
+          const result = data?.result?.[0] || data?.msg?.[0] || data?.result || data?.msg || null;
           setDetailData(result);
         })
         .catch((err) => {
