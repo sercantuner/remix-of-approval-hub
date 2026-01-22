@@ -108,7 +108,7 @@ export type Database = {
           invoice_emails: string[] | null
           is_enabled: boolean
           last_notification_sent: string | null
-          notification_hour: number
+          notification_hours: number[]
           order_emails: string[] | null
           updated_at: string
           user_id: string
@@ -123,7 +123,7 @@ export type Database = {
           invoice_emails?: string[] | null
           is_enabled?: boolean
           last_notification_sent?: string | null
-          notification_hour?: number
+          notification_hours?: number[]
           order_emails?: string[] | null
           updated_at?: string
           user_id: string
@@ -138,7 +138,7 @@ export type Database = {
           invoice_emails?: string[] | null
           is_enabled?: boolean
           last_notification_sent?: string | null
-          notification_hour?: number
+          notification_hours?: number[]
           order_emails?: string[] | null
           updated_at?: string
           user_id?: string

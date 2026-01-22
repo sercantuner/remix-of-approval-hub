@@ -122,38 +122,57 @@ serve(async (req) => {
     const now = new Date();
     const turkeyTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
     const currentHour = turkeyTime.getHours();
+    const todayDateString = turkeyTime.toDateString();
 
     console.log(`Running notification check for hour: ${currentHour}`);
 
-    // Get all users who should receive notifications at this hour
+    // Get all users who have notifications enabled
     const { data: notificationSettings, error: settingsError } = await supabase
       .from("notification_settings")
       .select("*")
-      .eq("is_enabled", true)
-      .eq("notification_hour", currentHour);
+      .eq("is_enabled", true);
 
     if (settingsError) {
       throw new Error(`Failed to fetch notification settings: ${settingsError.message}`);
     }
 
     if (!notificationSettings || notificationSettings.length === 0) {
-      console.log("No users scheduled for notifications at this hour");
+      console.log("No users with notifications enabled");
       return new Response(
         JSON.stringify({ success: true, message: "No notifications to send", sent: 0 }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Filter users whose notification_hours array contains the current hour
+    const usersToNotify = notificationSettings.filter(settings => {
+      const hours = settings.notification_hours as number[] || [];
+      return hours.includes(currentHour);
+    });
+
+    if (usersToNotify.length === 0) {
+      console.log(`No users scheduled for notifications at hour ${currentHour}`);
+      return new Response(
+        JSON.stringify({ success: true, message: "No notifications for this hour", sent: 0 }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     let totalSent = 0;
 
-    for (const settings of notificationSettings) {
+    for (const settings of usersToNotify) {
       try {
-        // Check if already sent today
+        // Check if already sent for this hour today
+        // We store last sent with hour info to allow multiple sends per day
         if (settings.last_notification_sent) {
           const lastSent = new Date(settings.last_notification_sent);
-          const today = new Date(turkeyTime.toDateString());
-          if (lastSent >= today) {
-            console.log(`Already sent notification today for user ${settings.user_id}`);
+          const lastSentTurkey = new Date(lastSent.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+          const lastSentDateString = lastSentTurkey.toDateString();
+          const lastSentHour = lastSentTurkey.getHours();
+          
+          // Skip if already sent at this hour today
+          if (lastSentDateString === todayDateString && lastSentHour === currentHour) {
+            console.log(`Already sent notification at ${currentHour}:00 today for user ${settings.user_id}`);
             continue;
           }
         }
