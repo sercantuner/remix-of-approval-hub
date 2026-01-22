@@ -17,6 +17,7 @@ import { CategoryCard } from "@/components/dashboard/CategoryCard";
 import { TransactionTable } from "@/components/dashboard/TransactionTable";
 import { TransactionDetailModal } from "@/components/dashboard/TransactionDetailModal";
 import { DiaConnectionForm } from "@/components/settings/DiaConnectionForm";
+import { SyncProgress } from "@/components/ui/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +34,16 @@ const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   order: "Siparişler",
 };
 
+const SYNC_STEPS = [
+  { id: "connect", label: "DIA'ya bağlanılıyor..." },
+  { id: "invoice", label: "Faturalar çekiliyor..." },
+  { id: "current_account", label: "Cari hareketler çekiliyor..." },
+  { id: "bank", label: "Banka hareketleri çekiliyor..." },
+  { id: "cash", label: "Kasa hareketleri çekiliyor..." },
+  { id: "order", label: "Siparişler çekiliyor..." },
+  { id: "save", label: "Veriler kaydediliyor..." },
+];
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -44,6 +55,19 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{
+    isOpen: boolean;
+    steps: Array<{ id: string; label: string; status: "pending" | "loading" | "done" | "error" }>;
+    currentStep: number;
+    totalRecords: number;
+    elapsedTime: number;
+  }>({
+    isOpen: false,
+    steps: SYNC_STEPS.map(s => ({ ...s, status: "pending" })),
+    currentStep: 0,
+    totalRecords: 0,
+    elapsedTime: 0,
+  });
   const [user, setUser] = useState<{ id: string; email: string; full_name?: string } | null>(null);
   const [hasDiaConnection, setHasDiaConnection] = useState<boolean | null>(null);
   const [profile, setProfile] = useState<any>(null);
@@ -237,10 +261,45 @@ export default function Dashboard() {
     setIsSyncing(true);
     const startTime = Date.now();
     
-    toast({
-      title: "Senkronizasyon Başlatıldı",
-      description: "DIA ERP'den veriler çekiliyor...",
+    // Initialize progress UI
+    setSyncProgress({
+      isOpen: true,
+      steps: SYNC_STEPS.map((s, i) => ({ 
+        ...s, 
+        status: i === 0 ? "loading" : "pending" 
+      })),
+      currentStep: 0,
+      totalRecords: 0,
+      elapsedTime: 0,
     });
+
+    // Update elapsed time every 100ms
+    const timerInterval = setInterval(() => {
+      setSyncProgress(prev => ({
+        ...prev,
+        elapsedTime: (Date.now() - startTime) / 1000,
+      }));
+    }, 100);
+
+    // Simulate step progress (backend runs in parallel, so we animate through steps)
+    const stepInterval = setInterval(() => {
+      setSyncProgress(prev => {
+        if (prev.currentStep < SYNC_STEPS.length - 1) {
+          const newSteps = prev.steps.map((s, i) => ({
+            ...s,
+            status: i < prev.currentStep + 1 ? "done" as const : 
+                   i === prev.currentStep + 1 ? "loading" as const : 
+                   "pending" as const,
+          }));
+          return {
+            ...prev,
+            steps: newSteps,
+            currentStep: prev.currentStep + 1,
+          };
+        }
+        return prev;
+      });
+    }, 500);
 
     try {
       // 30 saniye timeout ile senkronizasyon
@@ -251,14 +310,42 @@ export default function Dashboard() {
       const result = await Promise.race([diaSync(), timeoutPromise]);
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       
+      // Mark all steps as done
+      clearInterval(stepInterval);
+      setSyncProgress(prev => ({
+        ...prev,
+        steps: prev.steps.map(s => ({ ...s, status: "done" as const })),
+        currentStep: SYNC_STEPS.length - 1,
+        totalRecords: result.synced,
+      }));
+      
       await loadTransactions();
+      
+      // Close progress after a short delay
+      setTimeout(() => {
+        setSyncProgress(prev => ({ ...prev, isOpen: false }));
+      }, 1500);
       
       toast({
         title: "Senkronizasyon Tamamlandı",
         description: `${result.synced} işlem ${duration} saniyede senkronize edildi.`,
       });
     } catch (error) {
+      clearInterval(stepInterval);
       const errorMsg = error instanceof Error ? error.message : "Beklenmeyen hata";
+      
+      setSyncProgress(prev => ({
+        ...prev,
+        steps: prev.steps.map((s, i) => ({
+          ...s,
+          status: i <= prev.currentStep ? (i === prev.currentStep ? "error" : "done") : "pending",
+        })),
+      }));
+      
+      setTimeout(() => {
+        setSyncProgress(prev => ({ ...prev, isOpen: false }));
+      }, 2000);
+      
       toast({
         title: "Senkronizasyon Hatası",
         description: errorMsg === "timeout" 
@@ -267,6 +354,7 @@ export default function Dashboard() {
         variant: "destructive",
       });
     } finally {
+      clearInterval(timerInterval);
       setIsSyncing(false);
     }
   };
@@ -468,6 +556,14 @@ export default function Dashboard() {
         onClose={() => setSelectedTransaction(null)}
         onApprove={(id) => handleApprove([id])}
         onReject={(id) => handleReject([id])}
+      />
+
+      <SyncProgress
+        isOpen={syncProgress.isOpen}
+        steps={syncProgress.steps}
+        currentStep={syncProgress.currentStep}
+        totalRecords={syncProgress.totalRecords}
+        elapsedTime={syncProgress.elapsedTime}
       />
     </div>
   );

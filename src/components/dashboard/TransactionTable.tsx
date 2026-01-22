@@ -3,21 +3,16 @@ import {
   Check, 
   X, 
   Eye, 
-  MoreHorizontal,
   FileText,
-  Receipt
+  Receipt,
+  ExternalLink
 } from 'lucide-react';
 import { Transaction, TRANSACTION_STATUS_LABELS } from '@/types/transaction';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { ApprovalSlider } from '@/components/ui/ApprovalSlider';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -199,32 +194,14 @@ export function TransactionTable({
                   {getStatusBadge(transaction.status)}
                 </td>
                 <td className="p-4">
-                  <div className="flex items-center justify-center gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      onClick={() => onViewDetails(transaction)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost" className="h-8 w-8">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onApprove([transaction.id])}>
-                          <Check className="w-4 h-4 mr-2 text-success" />
-                          Onayla
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onReject([transaction.id])}>
-                          <X className="w-4 h-4 mr-2 text-destructive" />
-                          Reddet
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                  <div className="flex items-center justify-center gap-2">
+                    <ApprovalSlider
+                      size="sm"
+                      onApprove={() => onApprove([transaction.id])}
+                      onReject={() => onReject([transaction.id])}
+                      onAnalyze={() => onViewDetails(transaction)}
+                      disabled={transaction.status !== 'pending'}
+                    />
                   </div>
                 </td>
               </tr>

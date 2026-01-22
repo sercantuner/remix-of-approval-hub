@@ -23,10 +23,10 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     method: "scf_fatura_listele",
     endpoint: "scf/json",
     keyField: "_key", 
-    docField: "fisno", 
-    amountField: "net",  // net tutarı kullan
+    docField: "belgeno2",  // belgeno2 alanını kullan (resmi fatura numarası)
+    amountField: "net",
     dateField: "tarih", 
-    counterpartyField: "unvan",  // unvan alanından al
+    counterpartyField: "unvan",
     codeField: "__carikartkodu"
   },
   current_account: { 
