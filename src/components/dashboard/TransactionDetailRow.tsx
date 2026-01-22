@@ -107,14 +107,23 @@ function isHiddenField(field: string): boolean {
 function formatValueWithCurrency(value: unknown, fieldName?: string, currency?: string): string {
   if (value === null || value === undefined || value === '') return '-';
   if (typeof value === 'number') {
-    // Check if this is a currency field
+    // Check if this is a currency field - format with currency symbol
     if (fieldName && CURRENCY_FIELDS.includes(fieldName.toLowerCase())) {
       return formatCurrency(value, currency || 'TRY');
     }
-    if (Math.abs(value) >= 1 || value === 0) {
-      return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+    // All other numbers: format with 2 decimal places
+    return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  }
+  // Handle string numbers (some API responses return numbers as strings)
+  if (typeof value === 'string' && !isNaN(parseFloat(value)) && fieldName) {
+    const numValue = parseFloat(value);
+    if (CURRENCY_FIELDS.includes(fieldName.toLowerCase())) {
+      return formatCurrency(numValue, currency || 'TRY');
     }
-    return String(value);
+    // Format numeric strings with 2 decimals
+    if (['miktar', 'adet', 'kdvorani', 'indirimorani', 'kdv', 'iskonto'].includes(fieldName.toLowerCase())) {
+      return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numValue);
+    }
   }
   if (typeof value === 'boolean') return value ? 'Evet' : 'Hayır';
   return String(value);
@@ -156,16 +165,22 @@ function flattenLineItem(item: Record<string, unknown>): Record<string, unknown>
 }
 
 // Get columns for line items table based on transaction type
-function getLineItemColumns(type: string, items: Record<string, unknown>[]): string[] {
+function getLineItemColumns(type: string, items: Record<string, unknown>[], useFlattened: boolean = false): string[] {
   if (!items.length) return [];
   
-  const allKeys = Object.keys(items[0]).filter(k => !k.startsWith('_'));
-  
+  // For invoice/order, we use flattened columns directly since we normalize the data
   // Exact columns for invoice and order - only show these specific columns
   const exactColumns: Record<string, string[]> = {
     order: ['aciklama', 'miktar', 'birim', 'birimfiyat', 'tutar', 'iskonto', 'kdv', 'net'],
     invoice: ['aciklama', 'miktar', 'birim', 'birimfiyat', 'tutar', 'iskonto', 'kdv', 'net'],
   };
+  
+  // For invoice and order, return exact columns (they will be flattened)
+  if (exactColumns[type]) {
+    return exactColumns[type];
+  }
+  
+  const allKeys = Object.keys(items[0]).filter(k => !k.startsWith('_'));
   
   // Priority columns for other types (with fallback behavior)
   const priorityColumns: Record<string, string[]> = {
@@ -175,16 +190,6 @@ function getLineItemColumns(type: string, items: Record<string, unknown>[]): str
     check_note: ['ceksenetkodu', 'vadetarihi', 'tutar', 'portfoydurumu', 'kesideci'],
   };
 
-  // For invoice and order, only show exact columns
-  if (exactColumns[type]) {
-    const orderedColumns: string[] = [];
-    exactColumns[type].forEach(col => {
-      // Try exact match first, then case-insensitive
-      const found = allKeys.find(k => k === col) || allKeys.find(k => k.toLowerCase() === col.toLowerCase());
-      if (found) orderedColumns.push(found);
-    });
-    return orderedColumns;
-  }
 
   // For other types, use priority columns with fallback
   const priority = priorityColumns[type] || [];
