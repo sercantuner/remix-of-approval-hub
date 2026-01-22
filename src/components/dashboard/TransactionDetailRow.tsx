@@ -297,6 +297,12 @@ export function TransactionDetailRow({
                     Kur: {formatExchangeRate(parseFloat(String(detailData.dovizkuru)))}
                   </span>
                 )}
+                {/* Recording User */}
+                {detailData?._user && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    Kaydeden: #{String(detailData._user)}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -322,32 +328,11 @@ export function TransactionDetailRow({
                   )}
                 </>
               )}
-              {transaction.status === 'pending' && (
-                <>
-                  <Button 
-                    variant="destructive" 
-                    size="sm"
-                    onClick={onReject}
-                    className="h-8"
-                  >
-                    <X className="w-3 h-3 mr-1" />
-                    Reddet
-                  </Button>
-                  <Button 
-                    size="sm"
-                    onClick={onApprove}
-                    className="bg-success hover:bg-success/90 h-8"
-                  >
-                    <Check className="w-3 h-3 mr-1" />
-                    Onayla
-                  </Button>
-                </>
-              )}
             </div>
           </div>
 
-          {/* Main Fields Grid */}
-          {mainFields.length > 0 && (
+          {/* Main Fields Grid - Hide for invoice and order types */}
+          {!['invoice', 'order'].includes(transaction.type) && mainFields.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {mainFields.slice(0, 12).map(([key, value]) => {
                 const currency = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
