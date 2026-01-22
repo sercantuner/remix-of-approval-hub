@@ -217,7 +217,7 @@ export function TransactionTable({
                         const rawData = transaction.details as Record<string, unknown> | undefined;
                         const turuack = rawData?.turuack as string | undefined;
                         return (
-                          <p className="text-sm font-medium line-clamp-1">
+                          <p className="text-sm">
                             {turuack || transaction.description || '-'}
                           </p>
                         );
