@@ -65,16 +65,20 @@ Deno.serve(async (req) => {
     }
 
     // Build DIA API URL
-    const diaBaseUrl = `https://${sunucuAdi}.dia.com.tr/api/sis/json`;
+    const diaBaseUrl = `https://${sunucuAdi}.dia.com.tr/sis/json`;
 
-    // Create DIA login request
+    // Create DIA login request with correct format
     const diaLoginPayload = {
       login: {
-        api_key: apiKey,
-        kullanici: wsKullanici,
-        sifre: wsSifre,
-        firma_kodu: firmaKodu,
-        donem_kodu: donemKodu,
+        username: wsKullanici,
+        password: wsSifre,
+        disconnect_same_user: true,
+        lang: "tr",
+        params: {
+          apikey: apiKey,
+          firma_kodu: firmaKodu,
+          donem_kodu: donemKodu,
+        },
       },
     };
 
