@@ -40,7 +40,7 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     codeField: "carikodu"
   },
   bank: { 
-    method: "bcs_banka_fisi_listele",  // Liste için bcs_banka_fisi_listele kullan
+    method: "bcs_banka_fisi_listele_ayrintili",  // Ayrıntılı listele - her hareket ayrı satır
     endpoint: "bcs/json",
     keyField: "_key", 
     docField: "fisno", 
