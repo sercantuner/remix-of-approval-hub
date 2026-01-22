@@ -5,16 +5,29 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Transaction type mappings - Updated with correct DIA API v3 specifications
-const MODULE_MAPPINGS = {
+// Transaction type mappings - Updated with correct DIA API v3 field names from actual responses
+interface ModuleMapping {
+  method: string;
+  endpoint: string;
+  keyField: string;
+  docField: string;
+  amountField: string;
+  dateField: string;
+  counterpartyField: string;
+  codeField: string | null;
+  approvalField?: string;
+}
+
+const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
   invoice: { 
     method: "scf_fatura_listele",
     endpoint: "scf/json",
     keyField: "_key", 
     docField: "fisno", 
-    amountField: "toplam_tutar", 
+    amountField: "geneltoplam", 
     dateField: "tarih", 
-    counterpartyField: "_key_scf_carikart" 
+    counterpartyField: "cariunvan",
+    codeField: "__carikartkodu"
   },
   current_account: { 
     method: "scf_carihesap_fisi_listele_ayrintili",
@@ -23,7 +36,8 @@ const MODULE_MAPPINGS = {
     docField: "fisno", 
     amountField: "borc", 
     dateField: "tarih", 
-    counterpartyField: "_key_scf_carikart" 
+    counterpartyField: "cariunvan",
+    codeField: "carikodu"
   },
   bank: { 
     method: "bcs_banka_fisi_listele_ayrintili",
@@ -32,7 +46,8 @@ const MODULE_MAPPINGS = {
     docField: "fisno", 
     amountField: "tutar", 
     dateField: "tarih", 
-    counterpartyField: "aciklama" 
+    counterpartyField: "aciklama",
+    codeField: null
   },
   cash: { 
     method: "scf_kasaislemleri_listele",
@@ -41,7 +56,8 @@ const MODULE_MAPPINGS = {
     docField: "fisno", 
     amountField: "tutar", 
     dateField: "tarih", 
-    counterpartyField: "aciklama" 
+    counterpartyField: "aciklama",
+    codeField: null
   },
   order: { 
     method: "scf_siparis_listele",
@@ -50,7 +66,9 @@ const MODULE_MAPPINGS = {
     docField: "siparisno", 
     amountField: "toplam_tutar", 
     dateField: "tarih", 
-    counterpartyField: "_key_scf_carikart" 
+    counterpartyField: "cariunvan",
+    codeField: "__carikodu",
+    approvalField: "onay_txt"
   },
 };
 
@@ -192,28 +210,50 @@ Deno.serve(async (req) => {
         console.log(`[dia-sync] Fetching ${txType} using ${mapping.method}`);
         const result = await fetchDiaData(profile, mapping.method, mapping.endpoint);
         
-        // DIA response structure: { method_name: { kayitlar: [...] } } or { method_name: { records: [...] } }
-        const methodKey = mapping.method;
-        const records = result[methodKey]?.kayitlar || result[methodKey]?.records || result[methodKey]?.data || [];
+        // DIA API v3 response structure: { code: "200", msg: "", result: [...] }
+        const records = result.result || [];
+        
+        console.log(`[dia-sync] ${txType}: Found ${records.length} records`);
         
         syncResults[txType] = { count: records.length, success: true };
 
         // Transform and prepare for upsert
         for (const record of records) {
           const diaKey = String(record[mapping.keyField] || record._key);
-          const counterparty = typeof record[mapping.counterpartyField] === "object" 
-            ? record[mapping.counterpartyField]?.unvan || record[mapping.counterpartyField]?.aciklama || "Bilinmiyor"
-            : record[mapping.counterpartyField] || "Bilinmiyor";
+          
+          // Get counterparty name - prefer unvan field, fallback to aciklama
+          let counterparty = record[mapping.counterpartyField] || "Bilinmiyor";
+          if (typeof counterparty === "object") {
+            counterparty = counterparty?.unvan || counterparty?.aciklama || "Bilinmiyor";
+          }
+          
+          // Get amount - handle both positive amounts and borc/alacak fields
+          let amount = parseFloat(record[mapping.amountField]) || 0;
+          if (txType === "current_account" && record.alacak) {
+            // For current account, if alacak exists and borc is 0, use alacak as negative
+            if (amount === 0 && parseFloat(record.alacak) > 0) {
+              amount = -parseFloat(record.alacak);
+            }
+          }
+          
+          // Get currency
+          const currency = record.dovizturu || record.doviz || "TRY";
+          
+          // Get document type info
+          const docType = record.turu || record.turuack || null;
+          
+          // Get approval status for orders
+          const approvalStatus = mapping.approvalField ? record[mapping.approvalField] : null;
 
           transactionsToUpsert.push({
             user_id: userId,
             dia_record_id: `${mapping.method}-${diaKey}`,
             transaction_type: txType,
             document_no: record[mapping.docField] || diaKey,
-            description: record.aciklama || record.not || `${txType} işlemi`,
+            description: record.aciklama || record.not || docType || `${txType} işlemi`,
             counterparty,
-            amount: parseFloat(record[mapping.amountField]) || 0,
-            currency: "TRY",
+            amount,
+            currency,
             transaction_date: record[mapping.dateField] || new Date().toISOString().split("T")[0],
             status: "pending",
             dia_raw_data: record,
