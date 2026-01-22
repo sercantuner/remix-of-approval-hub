@@ -584,7 +584,7 @@ export default function Dashboard() {
                 transactions={filteredTransactions}
                 onApprove={handleApprove}
                 onReject={handleRejectClick}
-                onViewDetails={setSelectedTransaction}
+                onViewDetails={() => {}} // Accordion handles details now
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
               />
@@ -592,14 +592,6 @@ export default function Dashboard() {
           )}
         </div>
       </main>
-
-      <TransactionDetailModal
-        transaction={selectedTransaction}
-        open={!!selectedTransaction}
-        onClose={() => setSelectedTransaction(null)}
-        onApprove={(id) => handleApprove([id])}
-        onReject={(id) => handleRejectClick([id])}
-      />
 
       <RejectReasonDialog
         open={rejectDialogState.isOpen}
