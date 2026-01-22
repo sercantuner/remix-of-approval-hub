@@ -283,6 +283,15 @@ Deno.serve(async (req) => {
       // Build detail payload - use key param for some methods, filters for others
       let detailPayload: Record<string, unknown>;
       
+      // Convert recordKey to integer - DIA API requires numeric keys
+      const numericKey = parseInt(recordKey, 10);
+      if (isNaN(numericKey)) {
+        return new Response(
+          JSON.stringify({ error: `Invalid recordKey: ${recordKey} - must be numeric` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       if (detailConfig.useKeyParam) {
         // Use key parameter directly (e.g., scf_fatura_getir)
         detailPayload = {
@@ -290,7 +299,7 @@ Deno.serve(async (req) => {
             session_id: session.session_id,
             firma_kodu: session.firma_kodu,
             donem_kodu: session.donem_kodu,
-            key: recordKey,
+            key: numericKey,
             params: detailConfig.params || "",
           },
         };
@@ -301,7 +310,7 @@ Deno.serve(async (req) => {
             session_id: session.session_id,
             firma_kodu: session.firma_kodu,
             donem_kodu: session.donem_kodu,
-            filters: [{ field: "_key", operator: "", value: recordKey }],
+            filters: [{ field: "_key", operator: "", value: numericKey }],
             sorts: "",
             params: detailConfig.params || "",
             limit: 1,
