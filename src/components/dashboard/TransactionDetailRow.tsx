@@ -172,8 +172,15 @@ export function TransactionDetailRow({
       diaFetchDetail(transaction.type, recordKey)
         .then((data) => {
           console.log('[TransactionDetailRow] DIA response:', data);
-          // DIA may return data in different formats: result[], msg[], or directly as object
-          const result = data?.result?.[0] || data?.msg?.[0] || data?.result || data?.msg || null;
+          // DIA may return data in different formats:
+          // - scf_fatura_getir returns result as object directly
+          // - other methods may return result as array
+          let result = null;
+          if (data?.result) {
+            result = Array.isArray(data.result) ? data.result[0] : data.result;
+          } else if (data?.msg) {
+            result = Array.isArray(data.msg) ? data.msg[0] : data.msg;
+          }
           setDetailData(result);
         })
         .catch((err) => {
