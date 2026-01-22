@@ -364,13 +364,13 @@ Deno.serve(async (req) => {
       if (detailResult.result && detailResult.result.m_kalemler && Array.isArray(detailResult.result.m_kalemler)) {
         const firstKalem = detailResult.result.m_kalemler[0];
         if (firstKalem) {
-          console.log(`[dia-api] First kalem keys: ${Object.keys(firstKalem).join(', ')}`);
-          // Log stock related fields
-          if (firstKalem._key_stk_stokkart) {
-            console.log(`[dia-api] Stok kart: ${JSON.stringify(firstKalem._key_stk_stokkart).substring(0, 500)}`);
+          // Log full first kalem data (truncated for readability)
+          console.log(`[dia-api] First kalem FULL DATA: ${JSON.stringify(firstKalem).substring(0, 2000)}`);
+          
+          // Log _key_kalemturu if exists
+          if (firstKalem._key_kalemturu) {
+            console.log(`[dia-api] _key_kalemturu: ${JSON.stringify(firstKalem._key_kalemturu)}`);
           }
-          // Log turutxt/turuack fields
-          console.log(`[dia-api] turutxt: ${firstKalem.turutxt}, turuack: ${firstKalem.turuack}, aciklama: ${firstKalem.aciklama}`);
         }
       }
       
