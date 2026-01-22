@@ -124,6 +124,37 @@ function isCurrencyField(fieldName: string): boolean {
   return CURRENCY_FIELDS.includes(fieldName.toLowerCase());
 }
 
+// Flatten nested line item fields from DIA API
+function flattenLineItem(item: Record<string, unknown>): Record<string, unknown> {
+  const flat: Record<string, unknown> = { ...item };
+  
+  // _key_kalemturu.aciklama -> aciklama
+  if (item._key_kalemturu && typeof item._key_kalemturu === 'object') {
+    const kalemTuru = item._key_kalemturu as Record<string, unknown>;
+    if (kalemTuru.aciklama) {
+      flat.aciklama = kalemTuru.aciklama;
+    }
+  }
+  
+  // _key_scf_kalem_birimleri -> birim (array format: [[id, name], ...])
+  if (Array.isArray(item._key_scf_kalem_birimleri) && item._key_scf_kalem_birimleri.length > 0) {
+    const birimler = item._key_scf_kalem_birimleri;
+    if (Array.isArray(birimler[0]) && birimler[0].length > 1) {
+      flat.birim = birimler[0][1] || '';
+    }
+  }
+  
+  // Normalize field names (different API responses use different names)
+  flat.birimfiyat = item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
+  flat.tutar = item.tutari || item.tutar || 0;
+  flat.iskonto = item.indirimtutari || item.indirimtoplam || item.iskonto || 0;
+  flat.kdv = item.kdvtutari || item.kdvtutar || item.kdv || 0;
+  flat.net = item.net || (Number(flat.tutar || 0) - Number(flat.iskonto || 0) + Number(flat.kdv || 0));
+  flat.miktar = item.miktar || item.adet || 0;
+  
+  return flat;
+}
+
 // Get columns for line items table based on transaction type
 function getLineItemColumns(type: string, items: Record<string, unknown>[]): string[] {
   if (!items.length) return [];
@@ -382,21 +413,27 @@ export function TransactionDetailRow({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(items as Record<string, unknown>[]).map((item, idx) => (
-                        <TableRow key={idx} className="hover:bg-muted/30">
-                          {columns.map((col) => (
-                            <TableCell 
-                              key={col} 
-                              className={cn(
-                                "text-xs py-2 px-3",
-                                isCurrencyField(col) && "text-right tabular-nums"
-                              )}
-                            >
-                              {formatValueWithCurrency(item[col], col, currency)}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
+                      {(items as Record<string, unknown>[]).map((item, idx) => {
+                        // Flatten nested fields for invoice/order types
+                        const flatItem = ['invoice', 'order'].includes(transaction.type) 
+                          ? flattenLineItem(item) 
+                          : item;
+                        return (
+                          <TableRow key={idx} className="hover:bg-muted/30">
+                            {columns.map((col) => (
+                              <TableCell 
+                                key={col} 
+                                className={cn(
+                                  "text-xs py-2 px-3",
+                                  isCurrencyField(col) && "text-right tabular-nums"
+                                )}
+                              >
+                                {formatValueWithCurrency(flatItem[col], col, currency)}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

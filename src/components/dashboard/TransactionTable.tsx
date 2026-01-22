@@ -3,7 +3,7 @@ import {
   Check, 
   X, 
   FileText,
-  Receipt,
+  FileCheck,
   ChevronDown,
   ChevronUp,
   Loader2
@@ -194,7 +194,7 @@ export function TransactionTable({
                             title={efaturaLink ? "E-Fatura Görüntüle" : "E-Arşiv Görüntüle"}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Receipt className="w-4 h-4" />
+                            <FileCheck className="w-4 h-4" />
                           </a>
                         )}
                       </div>
