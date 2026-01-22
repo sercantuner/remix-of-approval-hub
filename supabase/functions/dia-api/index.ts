@@ -360,6 +360,25 @@ Deno.serve(async (req) => {
 
       const detailResult = await detailResponse.json();
       
+      // Log m_kalemler structure for debugging
+      if (detailResult.result && detailResult.result.m_kalemler && Array.isArray(detailResult.result.m_kalemler)) {
+        const firstKalem = detailResult.result.m_kalemler[0];
+        if (firstKalem) {
+          console.log(`[dia-api] First kalem keys: ${Object.keys(firstKalem).join(', ')}`);
+          // Log stock related fields
+          if (firstKalem._key_stk_stokkart) {
+            console.log(`[dia-api] Stok kart: ${JSON.stringify(firstKalem._key_stk_stokkart).substring(0, 500)}`);
+          }
+          // Log turutxt/turuack fields
+          console.log(`[dia-api] turutxt: ${firstKalem.turutxt}, turuack: ${firstKalem.turuack}, aciklama: ${firstKalem.aciklama}`);
+        }
+      }
+      
+      // Log _user field
+      if (detailResult.result && detailResult.result._user) {
+        console.log(`[dia-api] _user: ${detailResult.result._user}`);
+      }
+      
       return new Response(JSON.stringify(detailResult), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
