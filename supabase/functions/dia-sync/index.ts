@@ -135,12 +135,17 @@ async function fetchDiaData(profile: any, method: string, endpoint: string) {
   // Using correct DIA API v3 URL structure
   const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/${endpoint}`;
 
+  // Add _level1 filter with firma_kodu for multi-company filtering
+  const filters = [
+    { field: "_level1", operator: "", value: String(profile.dia_firma_kodu) }
+  ];
+
   const payload = {
     [method]: {
       session_id: profile.dia_session_id,
       firma_kodu: profile.dia_firma_kodu,
       donem_kodu: profile.dia_donem_kodu,
-      filters: "",
+      filters,
       sorts: "",
       params: "",
       limit: 100,

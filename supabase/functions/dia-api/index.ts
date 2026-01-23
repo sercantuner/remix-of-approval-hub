@@ -166,11 +166,15 @@ function buildDiaPayload(
   const methodName = `${module}${methodSuffix}`;
 
   if (action === "list") {
-    const filters = request.filters?.map(f => ({
-      field: f.field,
-      operator: operatorMap[f.operator] || f.operator,
-      value: f.value,
-    })) || [];
+    // Start with _level1 filter for firma_kodu
+    const filters = [
+      { field: "_level1", operator: "", value: String(session.firma_kodu) },
+      ...(request.filters?.map(f => ({
+        field: f.field,
+        operator: operatorMap[f.operator] || f.operator,
+        value: f.value,
+      })) || [])
+    ];
 
     return {
       [methodName]: {
@@ -259,7 +263,9 @@ Deno.serve(async (req) => {
           session_id: session.session_id,
           firma_kodu: session.firma_kodu,
           donem_kodu: session.donem_kodu,
-          filters: "",
+          filters: [
+            { field: "_level1", operator: "", value: String(session.firma_kodu) }
+          ],
           sorts: "",
           params: "",
           limit: 0,
