@@ -36,77 +36,26 @@ export function useApprovalQueue(options: UseApprovalQueueOptions) {
   
   const [queue, setQueue] = useState<QueuedAction[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Use refs to avoid stale closures and prevent re-renders from changing callbacks
   const processingRef = useRef(false);
   const queueRef = useRef<QueuedAction[]>([]);
   const optionsRef = useRef(options);
+  const toastRef = useRef(toast);
   
-  // Keep options ref updated
-  useEffect(() => {
-    optionsRef.current = options;
-  }, [options]);
+  // Keep refs updated
+  optionsRef.current = options;
+  toastRef.current = toast;
   
+  // Sync queue to ref
   useEffect(() => {
     queueRef.current = queue;
   }, [queue]);
 
-  // Process a single item
-  const processItem = useCallback(async (item: QueuedAction) => {
-    try {
-      const result = await diaApprove(
-        [item.transactionId], 
-        item.action, 
-        item.reason
-      );
-
-      const results = result?.results || [];
-      const firstResult = results[0];
-
-      if (firstResult?.success) {
-        // Success - mark as success
-        setQueue(prev => prev.map(q => 
-          q.id === item.id ? { ...q, status: 'success' as const } : q
-        ));
-        
-        // Check if DIA was updated or not
-        if (firstResult.diaUpdated) {
-          optionsRef.current.onSuccess(item.transactionId);
-        } else if (firstResult.diaError) {
-          // Only show partial success if there was an actual error
-          optionsRef.current.onPartialSuccess(item.transactionId);
-          toast({
-            title: '⚠ Yerel Olarak Kaydedildi',
-            description: `İşlem kaydedildi ancak DIA güncellenemedi: ${firstResult.diaError}`,
-          });
-        } else {
-          // No error, just not a DIA-updateable type - treat as success
-          optionsRef.current.onSuccess(item.transactionId);
-        }
-        return true;
-      } else {
-        throw new Error(firstResult?.error || 'İşlem başarısız');
-      }
-    } catch (error) {
-      // Failed - rollback
-      setQueue(prev => prev.map(q => 
-        q.id === item.id ? { 
-          ...q, 
-          status: 'failed' as const,
-          error: error instanceof Error ? error.message : 'Bilinmeyen hata'
-        } : q
-      ));
-      optionsRef.current.onRollback(item.transactionId);
-      
-      toast({
-        title: 'İşlem Başarısız',
-        description: error instanceof Error ? error.message : 'Bir hata oluştu',
-        variant: 'destructive',
-      });
-      return false;
-    }
-  }, [toast]);
-
-  // Process queue
-  const processQueue = useCallback(async () => {
+  // Process queue - uses refs to avoid dependency issues
+  const processQueueRef = useRef<() => Promise<void>>();
+  
+  processQueueRef.current = async () => {
     if (processingRef.current) return;
     
     const currentQueue = queueRef.current;
@@ -133,27 +82,76 @@ export function useApprovalQueue(options: UseApprovalQueueOptions) {
     );
 
     // Process the item
-    await processItem(nextPending);
+    try {
+      const result = await diaApprove(
+        [nextPending.transactionId], 
+        nextPending.action, 
+        nextPending.reason
+      );
+
+      const results = result?.results || [];
+      const firstResult = results[0];
+
+      if (firstResult?.success) {
+        // Success - mark as success
+        setQueue(prev => prev.map(q => 
+          q.id === nextPending.id ? { ...q, status: 'success' as const } : q
+        ));
+        
+        // Check if DIA was updated or not
+        if (firstResult.diaUpdated) {
+          optionsRef.current.onSuccess(nextPending.transactionId);
+        } else if (firstResult.diaError) {
+          // Only show partial success if there was an actual error
+          optionsRef.current.onPartialSuccess(nextPending.transactionId);
+          toastRef.current({
+            title: '⚠ Yerel Olarak Kaydedildi',
+            description: `İşlem kaydedildi ancak DIA güncellenemedi: ${firstResult.diaError}`,
+          });
+        } else {
+          // No error, just not a DIA-updateable type - treat as success
+          optionsRef.current.onSuccess(nextPending.transactionId);
+        }
+      } else {
+        throw new Error(firstResult?.error || 'İşlem başarısız');
+      }
+    } catch (error) {
+      // Failed - rollback
+      setQueue(prev => prev.map(q => 
+        q.id === nextPending.id ? { 
+          ...q, 
+          status: 'failed' as const,
+          error: error instanceof Error ? error.message : 'Bilinmeyen hata'
+        } : q
+      ));
+      optionsRef.current.onRollback(nextPending.transactionId);
+      
+      toastRef.current({
+        title: 'İşlem Başarısız',
+        description: error instanceof Error ? error.message : 'Bir hata oluştu',
+        variant: 'destructive',
+      });
+    }
     
     processingRef.current = false;
     
-    // Check for more items
+    // Check for more items after a small delay
     setTimeout(() => {
-      processQueue();
+      processQueueRef.current?.();
     }, 100);
-  }, [processItem]);
+  };
 
-  // Auto-process queue when items are added
+  // Trigger queue processing when items are added
   useEffect(() => {
     const hasPending = queue.some(q => q.status === 'pending');
     if (hasPending && !processingRef.current) {
       // Small delay to batch multiple enqueues
       const timer = setTimeout(() => {
-        processQueue();
+        processQueueRef.current?.();
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [queue, processQueue]);
+  }, [queue.length]); // Only depend on queue length to avoid recreating effect
 
   // Enqueue action with optimistic update
   const enqueue = useCallback((
