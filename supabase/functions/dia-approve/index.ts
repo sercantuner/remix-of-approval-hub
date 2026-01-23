@@ -63,18 +63,22 @@ async function getValidDiaSession(supabase: any, userId: string): Promise<DiaSes
   try {
     const loginUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
     const loginPayload = {
-      sis_kullanici_giris: {
+      login: {
+        username: profile.dia_ws_kullanici,
+        password: profile.dia_ws_sifre,
+        disconnect_same_user: true,
+        lang: "tr",
         params: {
-          kullaniciadi: profile.dia_ws_kullanici,
-          sifre: profile.dia_ws_sifre,
           apikey: profile.dia_api_key,
+          firma_kodu: profile.dia_firma_kodu,
+          donem_kodu: profile.dia_donem_kodu,
         },
       },
     };
 
     const response = await fetch(loginUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(loginPayload),
     });
 
