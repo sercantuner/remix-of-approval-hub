@@ -397,13 +397,69 @@ Deno.serve(async (req) => {
 
       console.log(`[dia-api] Fetching detail from ${diaDetailUrl} for ${transactionType}, key: ${recordKey}`);
 
-      const detailResponse = await fetch(diaDetailUrl, {
+      let detailResponse = await fetch(diaDetailUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(detailPayload),
       });
 
-      const detailResult = await detailResponse.json();
+      let detailResult = await detailResponse.json();
+      
+      // Check for INVALID_SESSION and retry with refreshed session
+      if (detailResult.code === "401" && detailResult.msg === "INVALID_SESSION") {
+        console.log("[dia-api] list_detail got INVALID_SESSION, refreshing session and retrying...");
+        
+        // Clear session
+        await supabase
+          .from("profiles")
+          .update({ dia_session_id: null, dia_session_expires: null })
+          .eq("id", userId);
+
+        // Try to get new session
+        const newSession = await getValidSession(supabase, userId);
+        if (newSession) {
+          // Rebuild payload with new session
+          if (detailConfig.useKeyParam) {
+            detailPayload = {
+              [detailConfig.method]: {
+                session_id: newSession.session_id,
+                firma_kodu: newSession.firma_kodu,
+                donem_kodu: newSession.donem_kodu,
+                key: numericKey,
+                params: detailConfig.params || "",
+              },
+            };
+          } else {
+            detailPayload = {
+              [detailConfig.method]: {
+                session_id: newSession.session_id,
+                firma_kodu: newSession.firma_kodu,
+                donem_kodu: newSession.donem_kodu,
+                filters: [{ field: "_key", operator: "", value: numericKey }],
+                sorts: "",
+                params: detailConfig.params || "",
+                limit: 1,
+                offset: 0,
+              },
+            };
+          }
+          
+          console.log(`[dia-api] Retrying detail fetch with new session`);
+          
+          detailResponse = await fetch(diaDetailUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(detailPayload),
+          });
+          
+          detailResult = await detailResponse.json();
+        } else {
+          return new Response(
+            JSON.stringify({ error: "Session expired. Please login again." }),
+            { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
       
       // ========== FULL DATA LOGGING FOR DEBUGGING ==========
       if (detailResult.result) {
