@@ -16,9 +16,11 @@ import {
   Eye,
 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileHeader } from "@/components/layout/MobileHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { CategoryCard } from "@/components/dashboard/CategoryCard";
 import { TransactionTable } from "@/components/dashboard/TransactionTable";
+import { MobileTransactionCard } from "@/components/dashboard/MobileTransactionCard";
 import { TransactionDetailModal } from "@/components/dashboard/TransactionDetailModal";
 import { DiaConnectionForm } from "@/components/settings/DiaConnectionForm";
 import { MailSettingsForm } from "@/components/settings/MailSettingsForm";
@@ -30,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useApprovalQueue } from "@/hooks/useApprovalQueue";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { diaSync } from "@/lib/diaApi";
 import type { Transaction, TransactionType, TransactionGroup, TransactionStatus, QueueStatus } from "@/types/transaction";
@@ -100,6 +103,7 @@ function processGroupedTransactions(transactions: Transaction[]): Transaction[] 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeCategory, setActiveCategory] = useState<TransactionType | null>(null);
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected" | "analyzing" | null>(null);
@@ -589,17 +593,27 @@ export default function Dashboard() {
   // Show settings if no DIA connection
   if (hasDiaConnection === false && activeSection !== "settings") {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar
-          activeSection="settings"
-          onSectionChange={handleSectionChange}
-          user={user}
-          onLogout={handleLogout}
-        />
-        <main className="flex-1 p-6">
-          <div className="max-w-2xl mx-auto mt-12">
+      <div className="flex flex-col md:flex-row min-h-screen bg-background">
+        {isMobile && (
+          <MobileHeader
+            activeSection="settings"
+            onSectionChange={handleSectionChange}
+            user={user}
+            onLogout={handleLogout}
+          />
+        )}
+        {!isMobile && (
+          <Sidebar
+            activeSection="settings"
+            onSectionChange={handleSectionChange}
+            user={user}
+            onLogout={handleLogout}
+          />
+        )}
+        <main className="flex-1 p-4 md:p-6">
+          <div className="max-w-2xl mx-auto mt-4 md:mt-12">
             <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 mb-6 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-warning mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-warning mt-0.5 shrink-0" />
               <div>
                 <h3 className="font-medium text-foreground">Dia ERP Bağlantısı Gerekli</h3>
                 <p className="text-sm text-muted-foreground">
@@ -617,32 +631,45 @@ export default function Dashboard() {
   // Settings page
   if (activeSection === "settings") {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar
-          activeSection={activeSection}
-          onSectionChange={handleSectionChange}
-          user={user}
-          onLogout={handleLogout}
-        />
-        <main className="flex-1 p-6">
-          <header className="mb-6">
-            <h1 className="text-2xl font-bold text-foreground">Ayarlar</h1>
-            <p className="text-muted-foreground">DIA ERP, mail ve bildirim ayarlarınızı yönetin.</p>
+      <div className="flex flex-col md:flex-row min-h-screen bg-background">
+        {isMobile && (
+          <MobileHeader
+            activeSection={activeSection}
+            onSectionChange={handleSectionChange}
+            user={user}
+            onLogout={handleLogout}
+          />
+        )}
+        {!isMobile && (
+          <Sidebar
+            activeSection={activeSection}
+            onSectionChange={handleSectionChange}
+            user={user}
+            onLogout={handleLogout}
+          />
+        )}
+        <main className="flex-1 p-4 md:p-6">
+          <header className="mb-4 md:mb-6">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground">Ayarlar</h1>
+            <p className="text-sm md:text-base text-muted-foreground">DIA ERP, mail ve bildirim ayarlarınızı yönetin.</p>
           </header>
           
-          <Tabs defaultValue="dia" className="space-y-6">
+          <Tabs defaultValue="dia" className="space-y-4 md:space-y-6">
             <TabsList className="grid w-full max-w-xl grid-cols-3">
-              <TabsTrigger value="dia" className="gap-2">
-                <Server className="w-4 h-4" />
-                DIA Bağlantısı
+              <TabsTrigger value="dia" className="gap-1 md:gap-2 text-xs md:text-sm">
+                <Server className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">DIA Bağlantısı</span>
+                <span className="sm:hidden">DIA</span>
               </TabsTrigger>
-              <TabsTrigger value="mail" className="gap-2">
-                <Mail className="w-4 h-4" />
-                Mail Ayarları
+              <TabsTrigger value="mail" className="gap-1 md:gap-2 text-xs md:text-sm">
+                <Mail className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Mail Ayarları</span>
+                <span className="sm:hidden">Mail</span>
               </TabsTrigger>
-              <TabsTrigger value="notifications" className="gap-2">
-                <Bell className="w-4 h-4" />
-                Bildirimler
+              <TabsTrigger value="notifications" className="gap-1 md:gap-2 text-xs md:text-sm">
+                <Bell className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Bildirimler</span>
+                <span className="sm:hidden">Bildirim</span>
               </TabsTrigger>
             </TabsList>
 
@@ -678,43 +705,60 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar
-        activeSection={activeSection}
-        onSectionChange={handleSectionChange}
-        user={user}
-        onLogout={handleLogout}
-      />
+    <div className="flex flex-col md:flex-row min-h-screen bg-background">
+      {/* Mobile Header */}
+      {isMobile && (
+        <MobileHeader
+          activeSection={activeSection}
+          onSectionChange={handleSectionChange}
+          user={user}
+          onLogout={handleLogout}
+          onSync={handleSync}
+          isSyncing={isSyncing}
+        />
+      )}
 
-      <main className="flex-1 overflow-auto">
-        {/* Header */}
-        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">
-                Hoş Geldiniz, {user?.full_name?.split(" ")[0] || "Kullanıcı"}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Onay bekleyen {stats.pending} işlem bulunuyor
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={handleSync} variant="outline" className="gap-2" disabled={isSyncing}>
-                <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
-                {isSyncing ? "Senkronize Ediliyor..." : "Senkronize Et"}
-              </Button>
-              <Button onClick={() => handleSectionChange("settings")} variant="ghost" size="icon">
-                <Settings className="w-5 h-5" />
-              </Button>
-            </div>
-          </div>
-        </header>
+      {/* Desktop Sidebar - hidden on mobile */}
+      {!isMobile && (
+        <Sidebar
+          activeSection={activeSection}
+          onSectionChange={handleSectionChange}
+          user={user}
+          onLogout={handleLogout}
+        />
+      )}
 
-        <div className="p-6 space-y-6">
-          {/* Stats Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-0' : ''}`}>
+        {/* Desktop Header - hidden on mobile */}
+        {!isMobile && (
+          <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">
+                  Hoş Geldiniz, {user?.full_name?.split(" ")[0] || "Kullanıcı"}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Onay bekleyen {stats.pending} işlem bulunuyor
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleSync} variant="outline" className="gap-2" disabled={isSyncing}>
+                  <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
+                  {isSyncing ? "Senkronize Ediliyor..." : "Senkronize Et"}
+                </Button>
+                <Button onClick={() => handleSectionChange("settings")} variant="ghost" size="icon">
+                  <Settings className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+          </header>
+        )}
+
+        <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+          {/* Stats Row - Scrollable on mobile */}
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-5 gap-2 md:gap-4">
             <StatCard 
-              title="Bekleyen İşlemler" 
+              title="Bekleyen" 
               value={stats.pending} 
               icon={Clock} 
               variant={statusFilter === null ? "primary" : "default"}
@@ -741,57 +785,61 @@ export default function Dashboard() {
               variant={statusFilter === "rejected" ? "primary" : "default"}
               onClick={() => setStatusFilter(statusFilter === "rejected" ? null : "rejected")}
             />
-            <StatCard 
-              title="Toplam İşlem" 
-              value={stats.total} 
-              icon={ClipboardCheck}
-            />
-          </div>
-
-          {/* Category Cards */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">İşlem Kategorileri</h2>
-              {activeCategory && (
-                <Button variant="ghost" size="sm" onClick={() => handleSectionChange("dashboard")}>
-                  Tümünü Göster
-                </Button>
-              )}
-            </div>
-            {groups.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                {groups.map((group) => (
-                  <CategoryCard
-                    key={group.type}
-                    type={group.type}
-                    label={group.label}
-                    count={group.count}
-                    totalAmount={group.totalAmount}
-                    onClick={() => setActiveCategory(group.type)}
-                    isActive={activeCategory === group.type}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="bg-muted/30 rounded-lg p-8 text-center">
-                <Clock className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">
-                  {isLoading ? "Yükleniyor..." : "Onay bekleyen işlem bulunmuyor"}
-                </p>
-                {!isLoading && hasDiaConnection && (
-                  <Button onClick={handleSync} variant="outline" className="mt-4" disabled={isSyncing}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Dia'dan Verileri Çek
-                  </Button>
-                )}
-              </div>
+            {!isMobile && (
+              <StatCard 
+                title="Toplam İşlem" 
+                value={stats.total} 
+                icon={ClipboardCheck}
+              />
             )}
           </div>
 
-          {/* Transactions Table */}
+          {/* Category Cards - Hidden on mobile when there's an active category */}
+          {(!isMobile || !activeCategory) && (
+            <div>
+              <div className="flex items-center justify-between mb-3 md:mb-4">
+                <h2 className="text-base md:text-lg font-semibold">İşlem Kategorileri</h2>
+                {activeCategory && (
+                  <Button variant="ghost" size="sm" onClick={() => handleSectionChange("dashboard")}>
+                    Tümünü Göster
+                  </Button>
+                )}
+              </div>
+              {groups.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 md:gap-4">
+                  {groups.map((group) => (
+                    <CategoryCard
+                      key={group.type}
+                      type={group.type}
+                      label={group.label}
+                      count={group.count}
+                      totalAmount={group.totalAmount}
+                      onClick={() => setActiveCategory(group.type)}
+                      isActive={activeCategory === group.type}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-muted/30 rounded-lg p-6 md:p-8 text-center">
+                  <Clock className="w-10 h-10 md:w-12 md:h-12 mx-auto text-muted-foreground/50 mb-3 md:mb-4" />
+                  <p className="text-muted-foreground text-sm md:text-base">
+                    {isLoading ? "Yükleniyor..." : "Onay bekleyen işlem bulunmuyor"}
+                  </p>
+                  {!isLoading && hasDiaConnection && (
+                    <Button onClick={handleSync} variant="outline" className="mt-3 md:mt-4" disabled={isSyncing}>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Dia'dan Verileri Çek
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Transactions */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3 md:mb-4">
+              <h2 className="text-base md:text-lg font-semibold">
                 {statusFilter === "approved" ? "Onaylanan İşlemler" :
                  statusFilter === "rejected" ? "Reddedilen İşlemler" :
                  statusFilter === "analyzing" ? "İncelenen İşlemler" :
@@ -799,36 +847,51 @@ export default function Dashboard() {
                   ? groups.find((g) => g.type === activeCategory)?.label
                   : "Onay Bekleyen İşlemler"}
               </h2>
-              <div className="flex items-center gap-3">
-                <div className="relative">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="relative flex-1 md:flex-none">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     placeholder="Ara..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 w-64"
+                    className="pl-9 w-full md:w-64"
                   />
                 </div>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon" className="shrink-0">
                   <Filter className="w-4 h-4" />
                 </Button>
               </div>
             </div>
 
             {filteredTransactions.length > 0 ? (
-              <TransactionTable
-                transactions={filteredTransactions}
-                onApprove={handleApprove}
-                onReject={handleRejectClick}
-                onAnalyze={handleAnalyze}
-                onViewDetails={() => {}} // Accordion handles details now
-                selectedIds={selectedIds}
-                onSelectionChange={setSelectedIds}
-              />
+              isMobile ? (
+                // Mobile: Swipeable cards
+                <div className="space-y-0">
+                  {filteredTransactions.map((transaction) => (
+                    <MobileTransactionCard
+                      key={transaction.id}
+                      transaction={transaction}
+                      onApprove={handleApprove}
+                      onReject={handleRejectClick}
+                    />
+                  ))}
+                </div>
+              ) : (
+                // Desktop: Table view
+                <TransactionTable
+                  transactions={filteredTransactions}
+                  onApprove={handleApprove}
+                  onReject={handleRejectClick}
+                  onAnalyze={handleAnalyze}
+                  onViewDetails={() => {}} // Accordion handles details now
+                  selectedIds={selectedIds}
+                  onSelectionChange={setSelectedIds}
+                />
+              )
             ) : (
-              <div className="bg-card rounded-xl shadow-card p-12 text-center">
-                <Search className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">
+              <div className="bg-card rounded-xl shadow-card p-8 md:p-12 text-center">
+                <Search className="w-10 h-10 md:w-12 md:h-12 mx-auto text-muted-foreground/50 mb-3 md:mb-4" />
+                <p className="text-muted-foreground text-sm md:text-base">
                   {searchQuery 
                     ? `"${searchQuery}" için sonuç bulunamadı` 
                     : "Görüntülenecek işlem bulunmuyor"}
