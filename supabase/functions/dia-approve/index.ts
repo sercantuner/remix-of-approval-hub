@@ -7,7 +7,7 @@ const corsHeaders = {
 
 interface ApproveRequest {
   transactionIds: string[];
-  action: "approve" | "reject";
+  action: "approve" | "reject" | "analyze";
   reason?: string;
 }
 
@@ -39,6 +39,7 @@ interface ProfileWithUstIslemKeys {
   dia_session_expires: string;
   dia_ust_islem_approve_key: number | null;
   dia_ust_islem_reject_key: number | null;
+  dia_ust_islem_analyze_key: number | null;
 }
 
 // Get valid DIA session, auto-refresh if expired
@@ -134,10 +135,11 @@ async function getValidDiaSession(supabase: any, userId: string): Promise<DiaSes
 async function updateDiaInvoice(
   session: DiaSession,
   key: number,
-  action: "approve" | "reject",
+  action: "approve" | "reject" | "analyze",
   reason?: string,
   approveKey?: number | null,
-  rejectKey?: number | null
+  rejectKey?: number | null,
+  analyzeKey?: number | null
 ): Promise<DiaUpdateResponse> {
   const apiUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
 
@@ -154,12 +156,18 @@ async function updateDiaInvoice(
       kart.ustislemturuack = "MUHASEBELEŞİR";
     }
     kart.ekalan5 = "Onaylandı";
-  } else {
+  } else if (action === "reject") {
     // Reject - use _key_sis_ust_islem_turu if rejectKey is set
     if (rejectKey) {
       kart._key_sis_ust_islem_turu = rejectKey;
     }
     kart.ekalan5 = `RED : ${reason || "Belirtilmedi"}`;
+  } else if (action === "analyze") {
+    // Analyze - set to analyze key and clear ekalan5
+    if (analyzeKey) {
+      kart._key_sis_ust_islem_turu = analyzeKey;
+    }
+    kart.ekalan5 = ""; // Clear ekalan5 for analyze
   }
 
   const payload = {
@@ -274,14 +282,15 @@ async function updateDiaInvoiceWithRetry(
   profile: ProfileWithUstIslemKeys,
   session: DiaSession,
   key: number,
-  action: "approve" | "reject",
+  action: "approve" | "reject" | "analyze",
   reason?: string
 ): Promise<DiaUpdateResponse> {
   const approveKey = profile.dia_ust_islem_approve_key;
   const rejectKey = profile.dia_ust_islem_reject_key;
+  const analyzeKey = profile.dia_ust_islem_analyze_key;
   
   // First attempt
-  let response = await updateDiaInvoice(session, key, action, reason, approveKey, rejectKey);
+  let response = await updateDiaInvoice(session, key, action, reason, approveKey, rejectKey, analyzeKey);
   
   // If INVALID_SESSION, refresh and retry once
   if (!response.success && response.code === "401") {
@@ -289,7 +298,7 @@ async function updateDiaInvoiceWithRetry(
     const newSession = await forceRefreshDiaSession(supabase, userId, profile);
     
     if (newSession) {
-      response = await updateDiaInvoice(newSession, key, action, reason, approveKey, rejectKey);
+      response = await updateDiaInvoice(newSession, key, action, reason, approveKey, rejectKey, analyzeKey);
     }
   }
   
@@ -341,7 +350,7 @@ Deno.serve(async (req) => {
     // Get profile for retry functionality and üst işlem keys
     const { data: profile } = await supabase
       .from("profiles")
-      .select("dia_sunucu_adi, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_firma_kodu, dia_donem_kodu, dia_session_id, dia_session_expires, dia_ust_islem_approve_key, dia_ust_islem_reject_key")
+      .select("dia_sunucu_adi, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_firma_kodu, dia_donem_kodu, dia_session_id, dia_session_expires, dia_ust_islem_approve_key, dia_ust_islem_reject_key, dia_ust_islem_analyze_key")
       .eq("id", userId)
       .maybeSingle();
 
@@ -383,9 +392,15 @@ Deno.serve(async (req) => {
       }
 
       // Update transaction status locally
-      const updateData = action === "approve"
-        ? { status: "approved", approved_at: now, approved_by: userId }
-        : { status: "rejected", rejected_at: now, rejected_by: userId, rejection_reason: reason };
+      let updateData: Record<string, unknown>;
+      if (action === "approve") {
+        updateData = { status: "approved", approved_at: now, approved_by: userId };
+      } else if (action === "reject") {
+        updateData = { status: "rejected", rejected_at: now, rejected_by: userId, rejection_reason: reason };
+      } else {
+        // analyze - back to pending
+        updateData = { status: "pending", approved_at: null, approved_by: null, rejected_at: null, rejected_by: null, rejection_reason: null };
+      }
 
       const { error: updateError } = await supabase
         .from("pending_transactions")
@@ -398,10 +413,11 @@ Deno.serve(async (req) => {
       }
 
       // Record in approval history with DIA response
+      const actionName = action === "approve" ? "approved" : action === "reject" ? "rejected" : "analyzed";
       await supabase.from("approval_history").insert({
         transaction_id: txId,
         user_id: userId,
-        action: action === "approve" ? "approved" : "rejected",
+        action: actionName,
         notes: reason,
         dia_response: diaResponse,
       });

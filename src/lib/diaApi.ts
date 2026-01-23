@@ -72,7 +72,7 @@ export async function diaSync() {
   return response.data;
 }
 
-export async function diaApprove(transactionIds: string[], action: "approve" | "reject", reason?: string) {
+export async function diaApprove(transactionIds: string[], action: "approve" | "reject" | "analyze", reason?: string) {
   const { data: sessionData } = await supabase.auth.getSession();
   if (!sessionData.session) {
     throw new Error("Not authenticated");
