@@ -1,139 +1,61 @@
 
 
-# DIA Güncelleme Sonuçlarını Dashboard'da Gösterme Planı
+# DIA Session Kolon Adı Düzeltme Planı
 
-## Mevcut Durum Analizi
+## Tespit Edilen Hata
 
-Son işlem incelemesi:
-- **Transaction ID:** `82222355-1e1d-402b-b710-60dc0761acd6`
-- **Belge No:** `000001` (Fatura)
-- **DIA _key:** `2444754`
-- **Durum:** Onaylandı
+Edge function kodunda yanlış kolon adı kullanılmış:
 
-Log mesajında `"Would update DIA record"` yazıyor ve `dia_response` alanında `simulated: true` görülüyor. Bu, edge function'ın henüz gerçek DIA API çağrısı yapmadığını gösteriyor. Yeni kod deploy edilince gerçek DIA yanıtları gelecek.
+| Kodda Kullanılan | Veritabanındaki Doğru Ad |
+|------------------|--------------------------|
+| `dia_session_expiry` | `dia_session_expires` |
 
-## Yapılacak İşlemler
+Bu hata `getValidDiaSession` fonksiyonunun çalışmamasına neden oluyor.
 
-### 1. diaApprove Fonksiyonunun Sonuç Döndürmesi
+## Yapılacak Değişiklik
 
-`diaApi.ts` dosyasındaki `diaApprove` fonksiyonu zaten sonuçları döndürüyor. Dashboard'da bu sonuçları işlememiz gerekiyor.
+**Dosya:** `supabase/functions/dia-approve/index.ts`
 
-### 2. Dashboard'da Toast Bildirimleri Güncelleme
-
-Onay/red işlemlerinden dönen DIA sonuçlarını kullanıcıya göstereceğiz:
-
-| Durum | Mesaj |
-|-------|-------|
-| DIA Başarılı | "İşlem DIA'da güncellendi ✓" |
-| DIA Başarısız | "Yerel onay kaydedildi, DIA güncellenemedi: {hata}" |
-| DIA Bağlantısı Yok | "Yerel onay kaydedildi" |
-
-### 3. Detaylı Sonuç Gösterimi
-
-Toplu işlemlerde her işlemin DIA sonucunu göstermek için:
-- Toast yerine veya ek olarak bir sonuç özeti dialog'u açılacak
-- Her işlem için başarı/başarısızlık durumu listelenecek
-
-## Değiştirilecek Dosyalar
-
-| Dosya | Değişiklik |
-|-------|------------|
-| `src/pages/Dashboard.tsx` | `handleApprove` ve `handleRejectConfirm` fonksiyonlarını DIA sonuçlarını işleyecek şekilde güncelle |
-| `src/components/dashboard/DiaResultDialog.tsx` | (Yeni) DIA sonuçlarını gösteren dialog bileşeni |
-
-## Uygulama Detayları
-
-### Dashboard.tsx Değişiklikleri
+### 1. Select sorgusunda kolon adı düzeltmesi (satır 35)
 
 ```typescript
-const handleApprove = async (ids: string[]) => {
-  try {
-    const result = await diaApprove(ids, "approve");
-    await loadTransactions();
-    setSelectedIds([]);
-    setSelectedTransaction(null);
-    
-    // DIA sonuçlarını işle
-    const diaUpdated = result.diaUpdated || 0;
-    const failed = result.results?.filter(r => r.diaUpdated === false && r.success) || [];
-    
-    if (diaUpdated === ids.length) {
-      toast({
-        title: "İşlemler Onaylandı",
-        description: `${ids.length} işlem DIA'da başarıyla güncellendi.`,
-      });
-    } else if (diaUpdated > 0) {
-      toast({
-        title: "Kısmi DIA Güncellemesi",
-        description: `${diaUpdated}/${ids.length} işlem DIA'da güncellendi.`,
-        variant: "default",
-      });
-    } else {
-      toast({
-        title: "İşlemler Onaylandı",
-        description: `${ids.length} işlem yerel olarak kaydedildi.`,
-      });
-    }
-  } catch (error) {
-    // ... hata işleme
-  }
-};
+// Yanlış:
+.select("dia_sunucu_adi, dia_session_id, dia_firma_kodu, dia_donem_kodu, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_session_expiry")
+
+// Doğru:
+.select("dia_sunucu_adi, dia_session_id, dia_firma_kodu, dia_donem_kodu, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_session_expires")
 ```
 
-### DiaResultDialog Bileşeni (Opsiyonel - Detaylı Görünüm)
-
-Toplu işlemlerde her bir işlemin sonucunu gösteren modal:
+### 2. Expiry kontrolünde kolon adı düzeltmesi (satır 46)
 
 ```typescript
-interface DiaResult {
-  id: string;
-  documentNo: string;
-  success: boolean;
-  diaUpdated: boolean;
-  diaMessage?: string;
-}
+// Yanlış:
+const expiry = profile.dia_session_expiry ? new Date(profile.dia_session_expiry) : null;
 
-// Dialog içeriği:
-// - Başarılı DIA güncellemeleri (yeşil ✓)
-// - Başarısız DIA güncellemeleri (sarı ⚠)
-// - Yerel onaylar (gri bilgi)
+// Doğru:
+const expiry = profile.dia_session_expires ? new Date(profile.dia_session_expires) : null;
 ```
 
-## İş Akışı
+### 3. Session yenileme update sorgusunda kolon adı düzeltmesi (satır 88-91)
 
-```text
-+---------------------+
-| Kullanıcı Onaylar   |
-+----------+----------+
-           |
-           v
-+----------+----------+
-| diaApprove() çağrısı|
-+----------+----------+
-           |
-           v
-+----------+----------+
-| Edge Function       |
-| - DIA API çağrısı   |
-| - Yerel DB güncelle |
-| - Sonuç döndür      |
-+----------+----------+
-           |
-           v
-+----------+----------+
-| Dashboard           |
-| - Sonuçları işle    |
-| - Toast göster      |
-| - Tabloyu yenile    |
-+---------------------+
+```typescript
+// Yanlış:
+.update({
+  dia_session_id: newSessionId,
+  dia_session_expiry: newExpiry.toISOString(),
+})
+
+// Doğru:
+.update({
+  dia_session_id: newSessionId,
+  dia_session_expires: newExpiry.toISOString(),
+})
 ```
 
-## Önerilen Yaklaşım
+## Düzeltme Sonrası Beklenen Davranış
 
-İlk aşamada basit toast bildirimleri ile başlayalım:
-1. DIA sonucu başarılı → Yeşil toast ile "DIA'da güncellendi"
-2. DIA sonucu başarısız → Sarı toast ile "DIA güncellenemedi, yerel kaydedildi"
-3. DIA olmayan işlemler → Normal toast
-
-İlerleyen aşamada detaylı sonuç dialog'u eklenebilir.
+1. Session bilgileri doğru okunacak
+2. Session süresi dolmuşsa otomatik yenilenecek
+3. DIA API'sine gerçek `scf_fatura_guncelle` isteği gönderilecek
+4. Gerçek DIA yanıtı `approval_history.dia_response` alanına kaydedilecek
 
