@@ -132,10 +132,11 @@ async function updateDiaInvoice(
   };
 
   if (action === "approve") {
-    kart.ustislemturuack = "MUHASEBELEŞEBİLİR";
+    kart.ustislemturuack = "MUHASEBELEŞİR";
     kart.ekalan5 = "Onaylandı";
   } else {
-    // Reject - only set ekalan5
+    // Reject - set ustislemturuack and ekalan5
+    kart.ustislemturuack = "MUHASEBELEŞMEYECEKTİR";
     kart.ekalan5 = `RED : ${reason || "Belirtilmedi"}`;
   }
 
@@ -183,6 +184,93 @@ async function updateDiaInvoice(
   }
 }
 
+// Force refresh DIA session and return new session
+async function forceRefreshDiaSession(supabase: any, userId: string, profile: any): Promise<DiaSession | null> {
+  console.log("[dia-approve] Force refreshing DIA session...");
+  const loginUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
+  
+  try {
+    const loginPayload = {
+      login: {
+        username: profile.dia_ws_kullanici,
+        password: profile.dia_ws_sifre,
+        disconnect_same_user: true,
+        lang: "tr",
+        params: {
+          apikey: profile.dia_api_key,
+          firma_kodu: profile.dia_firma_kodu,
+          donem_kodu: profile.dia_donem_kodu,
+        },
+      },
+    };
+
+    const response = await fetch(loginUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(loginPayload),
+    });
+
+    const result = await response.json();
+
+    if (result.code === "200" && result.msg) {
+      const newSessionId = result.msg;
+      const newExpiry = new Date(Date.now() + 55 * 60 * 1000);
+
+      await supabase
+        .from("profiles")
+        .update({
+          dia_session_id: newSessionId,
+          dia_session_expires: newExpiry.toISOString(),
+        })
+        .eq("id", userId);
+
+      console.log("[dia-approve] Session force refreshed successfully");
+
+      return {
+        session_id: newSessionId,
+        sunucu_adi: profile.dia_sunucu_adi,
+        firma_kodu: profile.dia_firma_kodu,
+        donem_kodu: profile.dia_donem_kodu,
+        api_key: profile.dia_api_key,
+        ws_kullanici: profile.dia_ws_kullanici,
+        ws_sifre: profile.dia_ws_sifre,
+      };
+    }
+
+    console.error("[dia-approve] Force refresh failed:", result);
+    return null;
+  } catch (err) {
+    console.error("[dia-approve] Force refresh error:", err);
+    return null;
+  }
+}
+
+// Update with retry on INVALID_SESSION
+async function updateDiaInvoiceWithRetry(
+  supabase: any,
+  userId: string,
+  profile: any,
+  session: DiaSession,
+  key: number,
+  action: "approve" | "reject",
+  reason?: string
+): Promise<DiaUpdateResponse> {
+  // First attempt
+  let response = await updateDiaInvoice(session, key, action, reason);
+  
+  // If INVALID_SESSION, refresh and retry once
+  if (!response.success && response.code === "401") {
+    console.log("[dia-approve] Got INVALID_SESSION, refreshing and retrying...");
+    const newSession = await forceRefreshDiaSession(supabase, userId, profile);
+    
+    if (newSession) {
+      response = await updateDiaInvoice(newSession, key, action, reason);
+    }
+  }
+  
+  return response;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -222,8 +310,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get DIA session for API calls
+    // Get DIA session and profile for API calls
     const diaSession = await getValidDiaSession(supabase, userId);
+    
+    // Get profile for retry functionality
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("dia_sunucu_adi, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_firma_kodu, dia_donem_kodu")
+      .eq("id", userId)
+      .maybeSingle();
 
     const results: any[] = [];
     const now = new Date().toISOString();
@@ -245,11 +340,12 @@ Deno.serve(async (req) => {
       let diaResponse: DiaUpdateResponse | null = null;
 
       // Only update DIA for invoice type transactions
-      if (diaSession && transaction.transaction_type === "invoice" && transaction.dia_raw_data?._key) {
+      if (diaSession && profile && transaction.transaction_type === "invoice" && transaction.dia_raw_data?._key) {
         const diaKey = parseInt(transaction.dia_raw_data._key, 10);
         console.log(`[dia-approve] Updating DIA invoice with _key: ${diaKey}`);
         
-        diaResponse = await updateDiaInvoice(diaSession, diaKey, action, reason);
+        // Use retry wrapper for INVALID_SESSION handling
+        diaResponse = await updateDiaInvoiceWithRetry(supabase, userId, profile, diaSession, diaKey, action, reason);
         
         if (!diaResponse.success) {
           console.error(`[dia-approve] DIA update failed for transaction ${txId}:`, diaResponse.message);
