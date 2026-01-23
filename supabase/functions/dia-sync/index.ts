@@ -368,9 +368,20 @@ Deno.serve(async (req) => {
         counterparty = counterparty || "Bilinmiyor";
         
         // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank
+        // For foreign currency invoices/orders, use netdvz (divide net by exchange rate)
         let amount = 0;
+        const exchangeRate = parseFloat(record.dovizkuru) || 1;
+        const isForeignCurrency = exchangeRate > 1;
+        
         if (txType === "invoice" || txType === "order") {
-          amount = parseFloat(record.net) || parseFloat(record[mapping.amountField]) || 0;
+          // For foreign currency: use netdvz or calculate from net/exchangeRate
+          if (isForeignCurrency) {
+            const netdvz = parseFloat(record.netdvz);
+            const net = parseFloat(record.net) || 0;
+            amount = !isNaN(netdvz) && netdvz > 0 ? netdvz : net / exchangeRate;
+          } else {
+            amount = parseFloat(record.net) || parseFloat(record[mapping.amountField]) || 0;
+          }
         } else if (txType === "current_account") {
           const borc = parseFloat(record.borc) || 0;
           const alacak = parseFloat(record.alacak) || 0;
@@ -387,7 +398,11 @@ Deno.serve(async (req) => {
           amount = parseFloat(record[mapping.amountField]) || 0;
         }
         
-        const currency = record.dovizturu || record.doviz || "TRY";
+        // Normalize currency code: TL -> TRY
+        let currency = record.dovizturu || record.doviz || "TRY";
+        if (currency === "TL") {
+          currency = "TRY";
+        }
         const docType = record.turu || record.turuack || null;
         const approvalStatus = mapping.approvalField ? record[mapping.approvalField] : null;
         
