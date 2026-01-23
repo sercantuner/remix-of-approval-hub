@@ -314,6 +314,42 @@ export default function Dashboard() {
     }
   };
 
+  // Analyze - move back to pending with analyze üst işlem
+  const handleAnalyze = async (ids: string[]) => {
+    try {
+      const result = await diaApprove(ids, "analyze");
+      // Reload transactions from database to ensure consistency
+      await loadTransactions();
+      setSelectedIds([]);
+      setSelectedTransaction(null);
+      
+      const diaUpdated = result?.diaUpdated || 0;
+      
+      if (diaUpdated === ids.length && diaUpdated > 0) {
+        toast({
+          title: "✓ Analize Alındı",
+          description: `${ids.length} işlem analiz aşamasına taşındı.`,
+        });
+      } else if (diaUpdated > 0) {
+        toast({
+          title: "Kısmi DIA Güncellemesi",
+          description: `${diaUpdated}/${ids.length} işlem DIA'da güncellendi.`,
+        });
+      } else {
+        toast({
+          title: "İşlemler Analize Alındı",
+          description: `${ids.length} işlem analiz aşamasına taşındı.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Hata",
+        description: "İşlemler analize alınırken bir hata oluştu.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Opens reject reason dialog
   const handleRejectClick = (ids: string[]) => {
     setRejectDialogState({ isOpen: true, transactionIds: ids });
@@ -704,6 +740,7 @@ export default function Dashboard() {
                 transactions={filteredTransactions}
                 onApprove={handleApprove}
                 onReject={handleRejectClick}
+                onAnalyze={handleAnalyze}
                 onViewDetails={() => {}} // Accordion handles details now
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}

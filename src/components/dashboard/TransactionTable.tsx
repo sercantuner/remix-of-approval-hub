@@ -38,6 +38,7 @@ interface TransactionTableProps {
   transactions: Transaction[];
   onApprove: (ids: string[]) => void;
   onReject: (ids: string[]) => void;
+  onAnalyze: (ids: string[]) => void;
   onViewDetails: (transaction: Transaction) => void;
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
@@ -47,6 +48,7 @@ export function TransactionTable({
   transactions,
   onApprove,
   onReject,
+  onAnalyze,
   onViewDetails,
   selectedIds,
   onSelectionChange,
@@ -319,7 +321,7 @@ export function TransactionTable({
                           size="sm"
                           onApprove={() => onApprove([transaction.id])}
                           onReject={() => onReject([transaction.id])}
-                          onAnalyze={() => toggleExpand(transaction.id)}
+                          onAnalyze={() => onAnalyze([transaction.id])}
                           disabled={false}
                           currentStatus={transaction.status}
                         />
