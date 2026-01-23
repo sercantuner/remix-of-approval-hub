@@ -571,6 +571,9 @@ Deno.serve(async (req) => {
         // For cash transactions, use kasacaribanka (contains bank name, service account, or cari name)
         if (txType === "cash") {
           counterparty = record.kasacaribanka || record.turuack || record.kasaadi || "";
+        } else if (txType === "bank") {
+          // For bank transactions, prioritize cariunvan, then bankahesapadi, then turuack
+          counterparty = record.cariunvan || record.bankahesapadi || record.turuack || "";
         } else {
           counterparty = record.__carifirma || record.__cariunvan || record.cariunvan || record.unvan || record[mapping.counterpartyField] || "";
           
