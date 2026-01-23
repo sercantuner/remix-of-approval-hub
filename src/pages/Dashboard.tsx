@@ -548,6 +548,9 @@ export default function Dashboard() {
                   sunucuAdi: profile?.dia_sunucu_adi,
                   firmaKodu: profile?.dia_firma_kodu,
                   donemKodu: profile?.dia_donem_kodu,
+                  ustIslemApproveKey: profile?.dia_ust_islem_approve_key,
+                  ustIslemRejectKey: profile?.dia_ust_islem_reject_key,
+                  ustIslemAnalyzeKey: profile?.dia_ust_islem_analyze_key,
                 }}
               />
             </TabsContent>
