@@ -1,11 +1,14 @@
-import { useState } from "react";
-import { Server, Key, User, Hash, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Server, Key, User, Hash, Loader2, CheckCircle, AlertCircle, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { diaLogin } from "@/lib/diaApi";
+import { diaLogin, diaFetchUstIslemTurleri, UstIslemTuru } from "@/lib/diaApi";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DiaConnectionFormProps {
   onSuccess: () => void;
@@ -13,6 +16,8 @@ interface DiaConnectionFormProps {
     sunucuAdi?: string;
     firmaKodu?: number;
     donemKodu?: number;
+    ustIslemApproveKey?: number;
+    ustIslemRejectKey?: number;
   };
 }
 
@@ -26,6 +31,78 @@ export function DiaConnectionForm({ onSuccess, existingConnection }: DiaConnecti
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle");
   const { toast } = useToast();
+
+  // Üst işlem türü state
+  const [ustIslemTurleri, setUstIslemTurleri] = useState<UstIslemTuru[]>([]);
+  const [approveKey, setApproveKey] = useState<string>(existingConnection?.ustIslemApproveKey?.toString() || "");
+  const [rejectKey, setRejectKey] = useState<string>(existingConnection?.ustIslemRejectKey?.toString() || "");
+  const [isLoadingUstIslem, setIsLoadingUstIslem] = useState(false);
+  const [isSavingUstIslem, setIsSavingUstIslem] = useState(false);
+
+  // Load üst işlem türleri if connection exists
+  useEffect(() => {
+    if (existingConnection?.sunucuAdi) {
+      loadUstIslemTurleri();
+    }
+  }, [existingConnection?.sunucuAdi]);
+
+  const loadUstIslemTurleri = async () => {
+    setIsLoadingUstIslem(true);
+    try {
+      const turleri = await diaFetchUstIslemTurleri();
+      setUstIslemTurleri(turleri);
+    } catch (error) {
+      console.error("Failed to load üst işlem türleri:", error);
+      toast({
+        title: "Uyarı",
+        description: "Üst işlem türleri yüklenemedi. Bağlantıyı kontrol edin.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingUstIslem(false);
+    }
+  };
+
+  const handleSaveUstIslemSettings = async () => {
+    if (!approveKey || !rejectKey) {
+      toast({
+        title: "Eksik Bilgi",
+        description: "Lütfen hem onay hem de red için üst işlem türü seçin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingUstIslem(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          dia_ust_islem_approve_key: parseInt(approveKey),
+          dia_ust_islem_reject_key: parseInt(rejectKey),
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Başarılı",
+        description: "Üst işlem türü ayarları kaydedildi.",
+      });
+    } catch (error) {
+      console.error("Failed to save üst işlem settings:", error);
+      toast({
+        title: "Hata",
+        description: "Ayarlar kaydedilemedi.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingUstIslem(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +135,10 @@ export function DiaConnectionForm({ onSuccess, existingConnection }: DiaConnecti
           title: "Bağlantı Başarılı",
           description: "Dia ERP bağlantısı kuruldu.",
         });
+        
+        // Load üst işlem türleri after successful connection
+        loadUstIslemTurleri();
+        
         onSuccess();
       } else {
         setConnectionStatus("error");
@@ -214,6 +295,88 @@ export function DiaConnectionForm({ onSuccess, existingConnection }: DiaConnecti
             )}
           </Button>
         </form>
+
+        {/* Üst İşlem Türü Ayarları - Bağlantı başarılı veya mevcut bağlantı varsa göster */}
+        {(connectionStatus === "success" || existingConnection?.sunucuAdi) && (
+          <>
+            <Separator className="my-6" />
+            
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Settings2 className="w-5 h-5 text-muted-foreground" />
+                <h3 className="font-semibold">Üst İşlem Türü Ayarları</h3>
+              </div>
+              
+              {isLoadingUstIslem ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Üst işlem türleri yükleniyor...</span>
+                </div>
+              ) : ustIslemTurleri.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Üst işlem türleri bulunamadı. Bağlantıyı kontrol edin.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="approveKey">Onay Üst İşlem Türü</Label>
+                    <Select value={approveKey} onValueChange={setApproveKey}>
+                      <SelectTrigger id="approveKey" className="bg-background">
+                        <SelectValue placeholder="Üst işlem türü seçin" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover z-50">
+                        {ustIslemTurleri.map((tur) => (
+                          <SelectItem key={tur._key} value={tur._key.toString()}>
+                            {tur.aciklama}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Onaylanan belgeler için kullanılacak üst işlem türü
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="rejectKey">Red Üst İşlem Türü</Label>
+                    <Select value={rejectKey} onValueChange={setRejectKey}>
+                      <SelectTrigger id="rejectKey" className="bg-background">
+                        <SelectValue placeholder="Üst işlem türü seçin" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover z-50">
+                        {ustIslemTurleri.map((tur) => (
+                          <SelectItem key={tur._key} value={tur._key.toString()}>
+                            {tur.aciklama}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Reddedilen belgeler için kullanılacak üst işlem türü
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={handleSaveUstIslemSettings}
+                    disabled={isSavingUstIslem || !approveKey || !rejectKey}
+                    className="w-full"
+                    variant="secondary"
+                  >
+                    {isSavingUstIslem ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Kaydediliyor...
+                      </>
+                    ) : (
+                      "Üst İşlem Ayarlarını Kaydet"
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
