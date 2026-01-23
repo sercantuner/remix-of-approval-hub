@@ -115,11 +115,17 @@ export async function diaFetchDetail(transactionType: string, recordKey: string)
 let userListCache: Record<number, string> | null = null;
 let userListLoading = false;
 let userListPromise: Promise<Record<number, string>> | null = null;
+let userListFetched = false; // Track if fetch was attempted
 
 export async function diaFetchUserList(): Promise<Record<number, string>> {
   // Return from cache if available
-  if (userListCache) {
+  if (userListCache && Object.keys(userListCache).length > 0) {
     return userListCache;
+  }
+
+  // If already tried and failed, don't retry infinitely
+  if (userListFetched && (!userListCache || Object.keys(userListCache).length === 0)) {
+    return {};
   }
 
   // If already loading, wait for the existing promise
@@ -128,6 +134,7 @@ export async function diaFetchUserList(): Promise<Record<number, string>> {
   }
 
   userListLoading = true;
+  userListFetched = true;
 
   userListPromise = (async () => {
     try {
@@ -135,6 +142,8 @@ export async function diaFetchUserList(): Promise<Record<number, string>> {
       if (!sessionData.session) {
         throw new Error("Not authenticated");
       }
+
+      console.log('[diaApi] Fetching user list from edge function...');
 
       const response = await supabase.functions.invoke("dia-api", {
         body: {
@@ -144,12 +153,17 @@ export async function diaFetchUserList(): Promise<Record<number, string>> {
       });
 
       if (response.error) {
+        console.error('[diaApi] User list error:', response.error);
         throw new Error(response.error.message);
       }
+
+      console.log('[diaApi] User list response:', JSON.stringify(response.data).substring(0, 500));
 
       // Build user map from response
       const users: Record<number, string> = {};
       const userList = response.data?.result || [];
+      console.log(`[diaApi] User list length: ${userList.length}`);
+      
       for (const user of userList) {
         if (user._key && user.gercekadi) {
           users[user._key] = user.gercekadi;
@@ -158,6 +172,7 @@ export async function diaFetchUserList(): Promise<Record<number, string>> {
         }
       }
 
+      console.log(`[diaApi] Mapped ${Object.keys(users).length} users`);
       userListCache = users;
       return users;
     } finally {
