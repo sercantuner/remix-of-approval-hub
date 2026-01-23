@@ -413,6 +413,118 @@ async function updateDiaCurrentAccountWithRetry(
   return response;
 }
 
+// Update bank receipt in DIA ERP using bcs_banka_fisi_guncelle
+// Same logic as current account - uses _key_bcs_banka_fisi as parent key
+async function updateDiaBank(
+  session: DiaSession,
+  parentKey: number,  // _key_bcs_banka_fisi - the main receipt key
+  action: "approve" | "reject" | "analyze",
+  reason?: string,
+  approveKey?: number | null,
+  rejectKey?: number | null,
+  analyzeKey?: number | null
+): Promise<DiaUpdateResponse> {
+  const apiUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/bcs/json`;
+
+  // Build the kart object based on action
+  // For bank, we use _key_bcs_banka_fisi (numeric parent key) and aciklama3 for status text
+  // IMPORTANT: bcs_banka_fisi_guncelle requires m_kalemler array (even if empty) to avoid key error
+  const kart: Record<string, unknown> = {
+    _key: parentKey, // Use the numeric parent key (_key_bcs_banka_fisi)
+    m_kalemler: [], // Required empty array - API expects this field
+  };
+
+  if (action === "approve") {
+    if (approveKey) {
+      kart._key_sis_ust_islem_turu = approveKey;
+    }
+    kart.aciklama3 = "Onaylandı";
+  } else if (action === "reject") {
+    if (rejectKey) {
+      kart._key_sis_ust_islem_turu = rejectKey;
+    }
+    kart.aciklama3 = `RED : ${reason || "Belirtilmedi"}`;
+  } else if (action === "analyze") {
+    if (analyzeKey) {
+      kart._key_sis_ust_islem_turu = analyzeKey;
+    }
+    kart.aciklama3 = "";
+  }
+
+  const payload = {
+    bcs_banka_fisi_guncelle: {
+      session_id: session.session_id,
+      firma_kodu: session.firma_kodu,
+      donem_kodu: session.donem_kodu,
+      kart,
+    },
+  };
+
+  console.log("[dia-approve] Sending DIA bank update request:", JSON.stringify(payload));
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    console.log("[dia-approve] DIA bank response:", JSON.stringify(result));
+
+    if (result.code === "200") {
+      return {
+        success: true,
+        code: result.code,
+        message: result.msg,
+        result: result.result,
+      };
+    }
+
+    return {
+      success: false,
+      code: result.code,
+      message: result.msg || "DIA update failed",
+    };
+  } catch (err) {
+    console.error("[dia-approve] DIA bank API error:", err);
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "DIA API connection error",
+    };
+  }
+}
+
+// Update bank with retry on INVALID_SESSION
+async function updateDiaBankWithRetry(
+  supabase: any,
+  userId: string,
+  profile: ProfileWithUstIslemKeys,
+  session: DiaSession,
+  parentKey: number,  // _key_bcs_banka_fisi
+  action: "approve" | "reject" | "analyze",
+  reason?: string
+): Promise<DiaUpdateResponse> {
+  const approveKey = profile.dia_ust_islem_approve_key;
+  const rejectKey = profile.dia_ust_islem_reject_key;
+  const analyzeKey = profile.dia_ust_islem_analyze_key;
+  
+  // First attempt
+  let response = await updateDiaBank(session, parentKey, action, reason, approveKey, rejectKey, analyzeKey);
+  
+  // If INVALID_SESSION, refresh and retry once
+  if (!response.success && response.code === "401") {
+    console.log("[dia-approve] Got INVALID_SESSION for bank, refreshing and retrying...");
+    const newSession = await forceRefreshDiaSession(supabase, userId, profile);
+    
+    if (newSession) {
+      response = await updateDiaBank(newSession, parentKey, action, reason, approveKey, rejectKey, analyzeKey);
+    }
+  }
+  
+  return response;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -503,10 +615,23 @@ Deno.serve(async (req) => {
         if (!diaResponse.success) {
           console.error(`[dia-approve] DIA current account update failed for transaction ${txId}:`, diaResponse.message);
         }
+      } else if (diaSession && profile && transaction.transaction_type === "bank" && transaction.dia_raw_data?._key_bcs_banka_fisi) {
+        // Bank uses _key_bcs_banka_fisi (parent key) for updates - same logic as current_account
+        const parentKey = parseInt(transaction.dia_raw_data._key_bcs_banka_fisi, 10);
+        console.log(`[dia-approve] Updating DIA bank with _key_bcs_banka_fisi: ${parentKey}`);
+        
+        // Use retry wrapper for INVALID_SESSION handling
+        diaResponse = await updateDiaBankWithRetry(supabase, userId, profile, diaSession, parentKey, action, reason);
+        
+        if (!diaResponse.success) {
+          console.error(`[dia-approve] DIA bank update failed for transaction ${txId}:`, diaResponse.message);
+        }
       } else if (transaction.transaction_type === "invoice" && !transaction.dia_raw_data?._key) {
         console.log(`[dia-approve] No _key found in dia_raw_data for invoice ${txId}`);
       } else if (transaction.transaction_type === "current_account" && !transaction.dia_raw_data?._key_scf_carihesap_fisi) {
         console.log(`[dia-approve] No _key_scf_carihesap_fisi found for current_account ${txId}`);
+      } else if (transaction.transaction_type === "bank" && !transaction.dia_raw_data?._key_bcs_banka_fisi) {
+        console.log(`[dia-approve] No _key_bcs_banka_fisi found for bank ${txId}`);
       } else {
         console.log(`[dia-approve] Skipping DIA update for transaction type: ${transaction.transaction_type}`);
       }

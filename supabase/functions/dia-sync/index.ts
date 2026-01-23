@@ -49,7 +49,8 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     amountField: "tutar", 
     dateField: "tarih", 
     counterpartyField: "aciklama",
-    codeField: null
+    codeField: null,
+    groupField: "_key_bcs_banka_fisi"  // Aynı banka fişi key'ine sahip satırları grupla (cari ile aynı mantık)
   },
   cash: { 
     method: "scf_kasaislemleri_listele",
