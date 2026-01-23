@@ -597,32 +597,32 @@ export default function Dashboard() {
           </div>
 
           {/* Transactions Table */}
-          {filteredTransactions.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">
-                  {statusFilter === "approved" ? "Onaylanan İşlemler" :
-                   statusFilter === "rejected" ? "Reddedilen İşlemler" :
-                   activeCategory
-                    ? groups.find((g) => g.type === activeCategory)?.label
-                    : "Tüm Onay Bekleyen İşlemler"}
-                </h2>
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Ara..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 w-64"
-                    />
-                  </div>
-                  <Button variant="outline" size="icon">
-                    <Filter className="w-4 h-4" />
-                  </Button>
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">
+                {statusFilter === "approved" ? "Onaylanan İşlemler" :
+                 statusFilter === "rejected" ? "Reddedilen İşlemler" :
+                 activeCategory
+                  ? groups.find((g) => g.type === activeCategory)?.label
+                  : "Tüm Onay Bekleyen İşlemler"}
+              </h2>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Ara..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 w-64"
+                  />
                 </div>
+                <Button variant="outline" size="icon">
+                  <Filter className="w-4 h-4" />
+                </Button>
               </div>
+            </div>
 
+            {filteredTransactions.length > 0 ? (
               <TransactionTable
                 transactions={filteredTransactions}
                 onApprove={handleApprove}
@@ -631,8 +631,27 @@ export default function Dashboard() {
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
               />
-            </div>
-          )}
+            ) : (
+              <div className="bg-card rounded-xl shadow-card p-12 text-center">
+                <Search className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">
+                  {searchQuery 
+                    ? `"${searchQuery}" için sonuç bulunamadı` 
+                    : "Görüntülenecek işlem bulunmuyor"}
+                </p>
+                {searchQuery && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    Aramayı Temizle
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 
