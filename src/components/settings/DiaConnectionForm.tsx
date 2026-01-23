@@ -41,6 +41,18 @@ export function DiaConnectionForm({ onSuccess, existingConnection }: DiaConnecti
   const [isLoadingUstIslem, setIsLoadingUstIslem] = useState(false);
   const [isSavingUstIslem, setIsSavingUstIslem] = useState(false);
 
+  // Sync state with existingConnection prop changes
+  useEffect(() => {
+    if (existingConnection) {
+      if (existingConnection.sunucuAdi) setSunucuAdi(existingConnection.sunucuAdi);
+      if (existingConnection.firmaKodu) setFirmaKodu(existingConnection.firmaKodu.toString());
+      if (existingConnection.donemKodu !== undefined) setDonemKodu(existingConnection.donemKodu.toString());
+      if (existingConnection.ustIslemApproveKey) setApproveKey(existingConnection.ustIslemApproveKey.toString());
+      if (existingConnection.ustIslemRejectKey) setRejectKey(existingConnection.ustIslemRejectKey.toString());
+      if (existingConnection.ustIslemAnalyzeKey) setAnalyzeKey(existingConnection.ustIslemAnalyzeKey.toString());
+    }
+  }, [existingConnection]);
+
   // Load üst işlem türleri if connection exists
   useEffect(() => {
     if (existingConnection?.sunucuAdi) {
