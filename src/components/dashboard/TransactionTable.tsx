@@ -346,12 +346,17 @@ export function TransactionTable({
                               <Icon className="w-3 h-3" />
                               {config.label}
                             </Badge>
-                            {/* Show link badge for grouped current_account transactions */}
-                            {transaction.type === "current_account" && transaction.movementCount && transaction.movementCount > 1 && transaction.linkedIndex && (
+                            {/* Show link badge for grouped current_account and bank transactions */}
+                            {(transaction.type === "current_account" || transaction.type === "bank") && transaction.movementCount && transaction.movementCount > 1 && transaction.linkedIndex && (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Badge variant="outline" className="text-xs bg-orange-50 border-orange-300 text-orange-700">
+                                    <Badge variant="outline" className={cn(
+                                      "text-xs",
+                                      transaction.type === "current_account" 
+                                        ? "bg-orange-50 border-orange-300 text-orange-700"
+                                        : "bg-green-50 border-green-300 text-green-700"
+                                    )}>
                                       🔗 {transaction.linkedIndex}/{transaction.movementCount}
                                     </Badge>
                                   </TooltipTrigger>
@@ -483,7 +488,8 @@ export function TransactionTable({
                       </div>
                     </td>
                   </tr>
-                  {isExpanded && (
+                  {/* Hide accordion details for current_account and bank - only show for other types */}
+                  {isExpanded && transaction.type !== "current_account" && transaction.type !== "bank" && (
                     <tr key={`${transaction.id}-detail`}>
                       <td colSpan={11} className="p-0">
                         <TransactionDetailRow 
