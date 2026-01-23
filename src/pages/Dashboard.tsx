@@ -53,12 +53,13 @@ const SYNC_STEPS = [
   { id: "save", label: "Veriler kaydediliyor..." },
 ];
 
-// Group current_account transactions by _key_scf_carihesap_fisi
-// But: If same groupKey has different currencies (e.g., TL + USD), show as separate rows
-function groupCurrentAccountTransactions(transactions: Transaction[]): Transaction[] {
+// Process current_account transactions - show all as separate rows but mark linked ones
+// All items with same groupKey belong to same receipt, single action affects all
+function processCurrentAccountTransactions(transactions: Transaction[]): Transaction[] {
   const result: Transaction[] = [];
   const currentAccountMap = new Map<string, Transaction[]>();
 
+  // Group by _key_scf_carihesap_fisi
   for (const t of transactions) {
     if (t.type === "current_account" && t.groupKey) {
       const existing = currentAccountMap.get(t.groupKey) || [];
@@ -69,51 +70,27 @@ function groupCurrentAccountTransactions(transactions: Transaction[]): Transacti
     }
   }
 
-  // Create grouped transactions - but separate by currency
+  // Process grouped items - show all as separate rows but mark as linked
   for (const [groupKey, items] of currentAccountMap.entries()) {
-    // Check if there are multiple currencies in the same group
-    const currencies = new Set(items.map(t => t.currency));
-    
-    if (currencies.size > 1) {
-      // Multiple currencies - don't group, show as individual rows
-      // Each row is independent, no expansion needed
-      for (const item of items) {
-        result.push({
-          ...item,
-          groupKey: undefined, // Remove groupKey so it's not expandable
-          childTransactions: undefined,
-          sourceTransactionIds: undefined,
-          movementCount: undefined,
-        });
-      }
-    } else if (items.length === 1) {
-      // Single item - no need to group
+    if (items.length === 1) {
+      // Single item - no linking needed
       result.push(items[0]);
     } else {
-      // Multiple items with same currency - create a parent transaction
-      const firstItem = items[0];
-      const totalAmount = items.reduce((sum, t) => sum + t.amount, 0);
+      // Multiple items - show each as separate row but mark as linked
+      // All items share the same sourceTransactionIds for bulk action
+      const allIds = items.map(t => t.id);
       
-      // Use the first item's info as the parent
-      const grouped: Transaction = {
-        id: `group-${groupKey}`,
-        type: "current_account",
-        description: firstItem.description,
-        amount: totalAmount,
-        currency: firstItem.currency,
-        exchangeRate: firstItem.exchangeRate,
-        date: firstItem.date,
-        documentNo: firstItem.documentNo,
-        counterparty: firstItem.counterparty,
-        status: firstItem.status,
-        diaRecordId: firstItem.diaRecordId,
-        details: firstItem.details,
-        groupKey,
-        childTransactions: items,
-        sourceTransactionIds: items.map(t => t.id),
-        movementCount: items.length,
-      };
-      result.push(grouped);
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        result.push({
+          ...item,
+          groupKey, // Keep groupKey to indicate linking
+          sourceTransactionIds: allIds, // All IDs for bulk action
+          movementCount: items.length, // Total count in group
+          linkedIndex: i + 1, // 1-indexed position in group
+          childTransactions: undefined, // No expansion/nesting
+        });
+      }
     }
   }
 
@@ -277,10 +254,10 @@ export default function Dashboard() {
         };
       });
 
-      // Group current_account transactions by groupKey
-      const groupedTransactions = groupCurrentAccountTransactions(mapped);
+      // Process current_account transactions - show as separate rows with linking
+      const processedTransactions = processCurrentAccountTransactions(mapped);
 
-      setTransactions(groupedTransactions);
+      setTransactions(processedTransactions);
     }
 
     setIsLoading(false);

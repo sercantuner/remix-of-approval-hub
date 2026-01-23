@@ -44,6 +44,9 @@ export interface Transaction {
   /** Child transactions when this is a grouped parent */
   childTransactions?: Transaction[];
 
+  /** UI-only: 1-indexed position of this item within a linked group (e.g., 1 of 3) */
+  linkedIndex?: number;
+
   /** UI-only: indicates the transaction is being processed in the queue */
   _processing?: boolean;
 

@@ -149,7 +149,6 @@ async function updateDiaInvoice(
   };
 
   if (action === "approve") {
-    // Use _key_sis_ust_islem_turu if approveKey is set, otherwise fallback to ustislemturuack
     if (approveKey) {
       kart._key_sis_ust_islem_turu = approveKey;
     } else {
@@ -157,17 +156,15 @@ async function updateDiaInvoice(
     }
     kart.ekalan5 = "Onaylandı";
   } else if (action === "reject") {
-    // Reject - use _key_sis_ust_islem_turu if rejectKey is set
     if (rejectKey) {
       kart._key_sis_ust_islem_turu = rejectKey;
     }
     kart.ekalan5 = `RED : ${reason || "Belirtilmedi"}`;
   } else if (action === "analyze") {
-    // Analyze - set to analyze key and clear ekalan5
     if (analyzeKey) {
       kart._key_sis_ust_islem_turu = analyzeKey;
     }
-    kart.ekalan5 = ""; // Clear ekalan5 for analyze
+    kart.ekalan5 = "";
   }
 
   const payload = {
@@ -179,7 +176,7 @@ async function updateDiaInvoice(
     },
   };
 
-  console.log("[dia-approve] Sending DIA update request:", JSON.stringify(payload));
+  console.log("[dia-approve] Sending DIA invoice update request:", JSON.stringify(payload));
 
   try {
     const response = await fetch(apiUrl, {
@@ -189,7 +186,7 @@ async function updateDiaInvoice(
     });
 
     const result = await response.json();
-    console.log("[dia-approve] DIA response:", JSON.stringify(result));
+    console.log("[dia-approve] DIA invoice response:", JSON.stringify(result));
 
     if (result.code === "200") {
       return {
@@ -207,6 +204,85 @@ async function updateDiaInvoice(
     };
   } catch (err) {
     console.error("[dia-approve] DIA API error:", err);
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "DIA API connection error",
+    };
+  }
+}
+
+// Update current account receipt in DIA ERP using scf_carihesap_fisi_guncelle
+async function updateDiaCurrentAccount(
+  session: DiaSession,
+  fisno: string,
+  action: "approve" | "reject" | "analyze",
+  reason?: string,
+  approveKey?: number | null,
+  rejectKey?: number | null,
+  analyzeKey?: number | null
+): Promise<DiaUpdateResponse> {
+  const apiUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
+
+  // Build the kart object based on action
+  // For current account, we use fisno as key and aciklama3 for status text
+  const kart: Record<string, unknown> = {
+    _key: { fisno }, // Use fisno as the key identifier
+  };
+
+  if (action === "approve") {
+    if (approveKey) {
+      kart._key_sis_ust_islem_turu = approveKey;
+    }
+    kart.aciklama3 = "Onaylandı";
+  } else if (action === "reject") {
+    if (rejectKey) {
+      kart._key_sis_ust_islem_turu = rejectKey;
+    }
+    kart.aciklama3 = `RED : ${reason || "Belirtilmedi"}`;
+  } else if (action === "analyze") {
+    if (analyzeKey) {
+      kart._key_sis_ust_islem_turu = analyzeKey;
+    }
+    kart.aciklama3 = "";
+  }
+
+  const payload = {
+    scf_carihesap_fisi_guncelle: {
+      session_id: session.session_id,
+      firma_kodu: session.firma_kodu,
+      donem_kodu: session.donem_kodu,
+      kart,
+    },
+  };
+
+  console.log("[dia-approve] Sending DIA current account update request:", JSON.stringify(payload));
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    console.log("[dia-approve] DIA current account response:", JSON.stringify(result));
+
+    if (result.code === "200") {
+      return {
+        success: true,
+        code: result.code,
+        message: result.msg,
+        result: result.result,
+      };
+    }
+
+    return {
+      success: false,
+      code: result.code,
+      message: result.msg || "DIA update failed",
+    };
+  } catch (err) {
+    console.error("[dia-approve] DIA current account API error:", err);
     return {
       success: false,
       message: err instanceof Error ? err.message : "DIA API connection error",
@@ -275,7 +351,7 @@ async function forceRefreshDiaSession(supabase: any, userId: string, profile: an
   }
 }
 
-// Update with retry on INVALID_SESSION
+// Update invoice with retry on INVALID_SESSION
 async function updateDiaInvoiceWithRetry(
   supabase: any,
   userId: string,
@@ -299,6 +375,36 @@ async function updateDiaInvoiceWithRetry(
     
     if (newSession) {
       response = await updateDiaInvoice(newSession, key, action, reason, approveKey, rejectKey, analyzeKey);
+    }
+  }
+  
+  return response;
+}
+
+// Update current account with retry on INVALID_SESSION
+async function updateDiaCurrentAccountWithRetry(
+  supabase: any,
+  userId: string,
+  profile: ProfileWithUstIslemKeys,
+  session: DiaSession,
+  fisno: string,
+  action: "approve" | "reject" | "analyze",
+  reason?: string
+): Promise<DiaUpdateResponse> {
+  const approveKey = profile.dia_ust_islem_approve_key;
+  const rejectKey = profile.dia_ust_islem_reject_key;
+  const analyzeKey = profile.dia_ust_islem_analyze_key;
+  
+  // First attempt
+  let response = await updateDiaCurrentAccount(session, fisno, action, reason, approveKey, rejectKey, analyzeKey);
+  
+  // If INVALID_SESSION, refresh and retry once
+  if (!response.success && response.code === "401") {
+    console.log("[dia-approve] Got INVALID_SESSION for current_account, refreshing and retrying...");
+    const newSession = await forceRefreshDiaSession(supabase, userId, profile);
+    
+    if (newSession) {
+      response = await updateDiaCurrentAccount(newSession, fisno, action, reason, approveKey, rejectKey, analyzeKey);
     }
   }
   
@@ -373,7 +479,7 @@ Deno.serve(async (req) => {
 
       let diaResponse: DiaUpdateResponse | null = null;
 
-      // Only update DIA for invoice type transactions
+      // Update DIA based on transaction type
       if (diaSession && profile && transaction.transaction_type === "invoice" && transaction.dia_raw_data?._key) {
         const diaKey = parseInt(transaction.dia_raw_data._key, 10);
         console.log(`[dia-approve] Updating DIA invoice with _key: ${diaKey}`);
@@ -382,13 +488,25 @@ Deno.serve(async (req) => {
         diaResponse = await updateDiaInvoiceWithRetry(supabase, userId, profile, diaSession, diaKey, action, reason);
         
         if (!diaResponse.success) {
-          console.error(`[dia-approve] DIA update failed for transaction ${txId}:`, diaResponse.message);
-          // Continue with local update even if DIA fails
+          console.error(`[dia-approve] DIA invoice update failed for transaction ${txId}:`, diaResponse.message);
+        }
+      } else if (diaSession && profile && transaction.transaction_type === "current_account" && transaction.document_no) {
+        // Current account uses fisno (document_no) for updates
+        const fisno = transaction.document_no;
+        console.log(`[dia-approve] Updating DIA current account with fisno: ${fisno}`);
+        
+        // Use retry wrapper for INVALID_SESSION handling
+        diaResponse = await updateDiaCurrentAccountWithRetry(supabase, userId, profile, diaSession, fisno, action, reason);
+        
+        if (!diaResponse.success) {
+          console.error(`[dia-approve] DIA current account update failed for transaction ${txId}:`, diaResponse.message);
         }
       } else if (transaction.transaction_type === "invoice" && !transaction.dia_raw_data?._key) {
-        console.log(`[dia-approve] No _key found in dia_raw_data for transaction ${txId}`);
-      } else if (transaction.transaction_type !== "invoice") {
-        console.log(`[dia-approve] Skipping DIA update for non-invoice transaction: ${transaction.transaction_type}`);
+        console.log(`[dia-approve] No _key found in dia_raw_data for invoice ${txId}`);
+      } else if (transaction.transaction_type === "current_account" && !transaction.document_no) {
+        console.log(`[dia-approve] No document_no found for current_account ${txId}`);
+      } else {
+        console.log(`[dia-approve] Skipping DIA update for transaction type: ${transaction.transaction_type}`);
       }
 
       // Update transaction status locally
