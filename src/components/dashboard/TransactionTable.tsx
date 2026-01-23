@@ -346,10 +346,21 @@ export function TransactionTable({
                               <Icon className="w-3 h-3" />
                               {config.label}
                             </Badge>
-                            {transaction.childTransactions && transaction.childTransactions.length > 1 && (
-                              <Badge variant="secondary" className="text-xs">
-                                {transaction.childTransactions.length} satır
-                              </Badge>
+                            {/* Show link badge for grouped current_account transactions */}
+                            {transaction.type === "current_account" && transaction.movementCount && transaction.movementCount > 1 && transaction.linkedIndex && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="outline" className="text-xs bg-orange-50 border-orange-300 text-orange-700">
+                                      🔗 {transaction.linkedIndex}/{transaction.movementCount}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Bu fiş {transaction.movementCount} satırdan oluşuyor.</p>
+                                    <p className="text-xs text-muted-foreground">Tek işlem tüm satırları etkiler.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                           </div>
                         );
@@ -453,9 +464,18 @@ export function TransactionTable({
                         ) : (
                           <ApprovalSlider
                             size="sm"
-                            onApprove={() => onApprove([transaction.id])}
-                            onReject={() => onReject([transaction.id])}
-                            onAnalyze={() => onAnalyze([transaction.id])}
+                            onApprove={() => {
+                              const idsToProcess = transaction.sourceTransactionIds || [transaction.id];
+                              onApprove(idsToProcess);
+                            }}
+                            onReject={() => {
+                              const idsToProcess = transaction.sourceTransactionIds || [transaction.id];
+                              onReject(idsToProcess);
+                            }}
+                            onAnalyze={() => {
+                              const idsToProcess = transaction.sourceTransactionIds || [transaction.id];
+                              onAnalyze(idsToProcess);
+                            }}
                             disabled={!!transaction._processing}
                             currentStatus={transaction.status}
                           />
@@ -463,72 +483,20 @@ export function TransactionTable({
                       </div>
                     </td>
                   </tr>
-                  {isExpanded && transaction.childTransactions && transaction.childTransactions.length > 1 ? (
-                    <tr key={`${transaction.id}-children`}>
-                      <td colSpan={11} className="p-0">
-                        <div className="border-l-4 border-l-primary bg-primary/5 mx-4 my-2 rounded-lg overflow-hidden">
-                          <div className="p-4">
-                            <table className="w-full">
-                              <thead>
-                                <tr className="border-b bg-muted/30">
-                                  <th className="p-2 text-left text-xs font-medium text-muted-foreground">Cari</th>
-                                  <th className="p-2 text-left text-xs font-medium text-muted-foreground">Açıklama</th>
-                                  <th className="p-2 text-right text-xs font-medium text-muted-foreground">Borç</th>
-                                  <th className="p-2 text-right text-xs font-medium text-muted-foreground">Alacak</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y">
-                                {transaction.childTransactions.map((child) => {
-                                  const childRaw = child.details as Record<string, unknown> | undefined;
-                                  const borc = parseFloat(String(childRaw?.borc || 0));
-                                  const alacak = parseFloat(String(childRaw?.alacak || 0));
-                                  return (
-                                    <tr key={child.id} className="hover:bg-muted/20">
-                                      <td className="p-2 text-sm">{child.counterparty || '-'}</td>
-                                      <td className="p-2 text-sm text-muted-foreground">{childRaw?.aciklama as string || child.description || '-'}</td>
-                                      <td className="p-2 text-sm text-right tabular-nums">
-                                        {borc > 0 ? formatCurrency(borc, child.currency) : '-'}
-                                      </td>
-                                      <td className="p-2 text-sm text-right tabular-nums">
-                                        {alacak > 0 ? formatCurrency(alacak, child.currency) : '-'}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                              <tfoot>
-                                <tr className="border-t-2 bg-muted/20 font-semibold">
-                                  <td colSpan={2} className="p-2 text-sm">Toplam</td>
-                                  <td className="p-2 text-sm text-right tabular-nums">
-                                    {formatCurrency(
-                                      transaction.childTransactions.reduce((sum, c) => 
-                                        sum + parseFloat(String((c.details as Record<string, unknown>)?.borc || 0)), 0
-                                      ),
-                                      transaction.currency
-                                    )}
-                                  </td>
-                                  <td className="p-2 text-sm text-right tabular-nums">
-                                    {formatCurrency(
-                                      transaction.childTransactions.reduce((sum, c) => 
-                                        sum + parseFloat(String((c.details as Record<string, unknown>)?.alacak || 0)), 0
-                                      ),
-                                      transaction.currency
-                                    )}
-                                  </td>
-                                </tr>
-                              </tfoot>
-                            </table>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : isExpanded && (
+                  {isExpanded && (
                     <tr key={`${transaction.id}-detail`}>
                       <td colSpan={11} className="p-0">
                         <TransactionDetailRow 
                           transaction={transaction} 
-                          onApprove={() => onApprove([transaction.id])}
-                          onReject={() => onReject([transaction.id])}
+                          onApprove={() => {
+                            // For linked transactions, use sourceTransactionIds if available
+                            const idsToProcess = transaction.sourceTransactionIds || [transaction.id];
+                            onApprove(idsToProcess);
+                          }}
+                          onReject={() => {
+                            const idsToProcess = transaction.sourceTransactionIds || [transaction.id];
+                            onReject(idsToProcess);
+                          }}
                         />
                       </td>
                     </tr>
