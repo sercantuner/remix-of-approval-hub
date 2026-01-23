@@ -525,6 +525,116 @@ async function updateDiaBankWithRetry(
   return response;
 }
 
+// Update cash receipt in DIA ERP using scf_kasaislemleri_guncelle
+// Similar logic to bank - uses _key and aciklama3 for status text
+async function updateDiaCash(
+  session: DiaSession,
+  key: number,  // _key - the main receipt key
+  action: "approve" | "reject" | "analyze",
+  reason?: string,
+  approveKey?: number | null,
+  rejectKey?: number | null,
+  analyzeKey?: number | null
+): Promise<DiaUpdateResponse> {
+  const apiUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
+
+  // Build the kart object based on action
+  // For cash, we use _key and aciklama3 for status text (same as bank/current_account)
+  const kart: Record<string, unknown> = {
+    _key: key,
+  };
+
+  if (action === "approve") {
+    if (approveKey) {
+      kart._key_sis_ust_islem_turu = approveKey;
+    }
+    kart.aciklama3 = "Onaylandı";
+  } else if (action === "reject") {
+    if (rejectKey) {
+      kart._key_sis_ust_islem_turu = rejectKey;
+    }
+    kart.aciklama3 = `RED : ${reason || "Belirtilmedi"}`;
+  } else if (action === "analyze") {
+    if (analyzeKey) {
+      kart._key_sis_ust_islem_turu = analyzeKey;
+    }
+    kart.aciklama3 = "";
+  }
+
+  const payload = {
+    scf_kasaislemleri_guncelle: {
+      session_id: session.session_id,
+      firma_kodu: session.firma_kodu,
+      donem_kodu: session.donem_kodu,
+      kart,
+    },
+  };
+
+  console.log("[dia-approve] Sending DIA cash update request:", JSON.stringify(payload));
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    console.log("[dia-approve] DIA cash response:", JSON.stringify(result));
+
+    if (result.code === "200") {
+      return {
+        success: true,
+        code: result.code,
+        message: result.msg,
+        result: result.result,
+      };
+    }
+
+    return {
+      success: false,
+      code: result.code,
+      message: result.msg || "DIA update failed",
+    };
+  } catch (err) {
+    console.error("[dia-approve] DIA cash API error:", err);
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "DIA API connection error",
+    };
+  }
+}
+
+// Update cash with retry on INVALID_SESSION
+async function updateDiaCashWithRetry(
+  supabase: any,
+  userId: string,
+  profile: ProfileWithUstIslemKeys,
+  session: DiaSession,
+  key: number,  // _key
+  action: "approve" | "reject" | "analyze",
+  reason?: string
+): Promise<DiaUpdateResponse> {
+  const approveKey = profile.dia_ust_islem_approve_key;
+  const rejectKey = profile.dia_ust_islem_reject_key;
+  const analyzeKey = profile.dia_ust_islem_analyze_key;
+  
+  // First attempt
+  let response = await updateDiaCash(session, key, action, reason, approveKey, rejectKey, analyzeKey);
+  
+  // If INVALID_SESSION, refresh and retry once
+  if (!response.success && response.code === "401") {
+    console.log("[dia-approve] Got INVALID_SESSION for cash, refreshing and retrying...");
+    const newSession = await forceRefreshDiaSession(supabase, userId, profile);
+    
+    if (newSession) {
+      response = await updateDiaCash(newSession, key, action, reason, approveKey, rejectKey, analyzeKey);
+    }
+  }
+  
+  return response;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -626,12 +736,25 @@ Deno.serve(async (req) => {
         if (!diaResponse.success) {
           console.error(`[dia-approve] DIA bank update failed for transaction ${txId}:`, diaResponse.message);
         }
+      } else if (diaSession && profile && transaction.transaction_type === "cash" && transaction.dia_raw_data?._key) {
+        // Cash uses _key for updates - similar logic to invoice but with scf_kasaislemleri_guncelle
+        const diaKey = parseInt(transaction.dia_raw_data._key, 10);
+        console.log(`[dia-approve] Updating DIA cash with _key: ${diaKey}`);
+        
+        // Use retry wrapper for INVALID_SESSION handling
+        diaResponse = await updateDiaCashWithRetry(supabase, userId, profile, diaSession, diaKey, action, reason);
+        
+        if (!diaResponse.success) {
+          console.error(`[dia-approve] DIA cash update failed for transaction ${txId}:`, diaResponse.message);
+        }
       } else if (transaction.transaction_type === "invoice" && !transaction.dia_raw_data?._key) {
         console.log(`[dia-approve] No _key found in dia_raw_data for invoice ${txId}`);
       } else if (transaction.transaction_type === "current_account" && !transaction.dia_raw_data?._key_scf_carihesap_fisi) {
         console.log(`[dia-approve] No _key_scf_carihesap_fisi found for current_account ${txId}`);
       } else if (transaction.transaction_type === "bank" && !transaction.dia_raw_data?._key_bcs_banka_fisi) {
         console.log(`[dia-approve] No _key_bcs_banka_fisi found for bank ${txId}`);
+      } else if (transaction.transaction_type === "cash" && !transaction.dia_raw_data?._key) {
+        console.log(`[dia-approve] No _key found in dia_raw_data for cash ${txId}`);
       } else {
         console.log(`[dia-approve] Skipping DIA update for transaction type: ${transaction.transaction_type}`);
       }
