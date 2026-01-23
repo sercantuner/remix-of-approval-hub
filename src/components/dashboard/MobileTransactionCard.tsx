@@ -49,9 +49,14 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
   const config = TRANSACTION_TYPE_CONFIG[transaction.type];
   const TypeIcon = config?.icon || Receipt;
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  // Pointer Events - works for both touch and mouse
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (isProcessing || transaction.status !== 'pending') return;
-    startX.current = e.touches[0].clientX;
+    
+    // Capture pointer for consistent tracking
+    e.currentTarget.setPointerCapture(e.pointerId);
+    
+    startX.current = e.clientX;
     setIsDragging(true);
     hapticTriggered.current = false;
     thresholdHapticTriggered.current = false;
@@ -59,10 +64,10 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
     setSwipeDirection(null);
   }, [isProcessing, transaction.status]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!isDragging || isProcessing) return;
-    const currentX = e.touches[0].clientX;
-    const diff = currentX - startX.current;
+    
+    const diff = e.clientX - startX.current;
     setOffsetX(diff);
 
     // Determine swipe direction
@@ -91,8 +96,11 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
     }
   }, [isDragging, isProcessing]);
 
-  const handleTouchEnd = useCallback(() => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
     if (!isDragging || isProcessing) return;
+    
+    // Release pointer capture
+    e.currentTarget.releasePointerCapture(e.pointerId);
     setIsDragging(false);
 
     const ids = transaction.sourceTransactionIds || [transaction.id];
@@ -111,6 +119,13 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
     setHasPassedThreshold(false);
     setSwipeDirection(null);
   }, [isDragging, isProcessing, offsetX, transaction.sourceTransactionIds, transaction.id, onApprove, onReject]);
+
+  const handlePointerCancel = useCallback(() => {
+    setIsDragging(false);
+    setOffsetX(0);
+    setHasPassedThreshold(false);
+    setSwipeDirection(null);
+  }, []);
 
   const getStatusBadge = (status: Transaction['status']) => {
     const variants: Record<Transaction['status'], string> = {
@@ -206,13 +221,15 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
           hasPassedThreshold && isApproveSwipe && "border-success/50",
           hasPassedThreshold && isRejectSwipe && "border-destructive/50"
         )}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         style={{ 
           transform: `translateX(${offsetX}px) rotate(${cardRotation}deg)`,
           transition: isDragging ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          touchAction: 'pan-y',
         }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
