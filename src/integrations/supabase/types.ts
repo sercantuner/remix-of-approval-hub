@@ -155,6 +155,7 @@ export type Database = {
           created_at: string | null
           currency: string | null
           description: string | null
+          dia_firma_kodu: number | null
           dia_raw_data: Json | null
           dia_record_id: string
           document_no: string
@@ -177,6 +178,7 @@ export type Database = {
           created_at?: string | null
           currency?: string | null
           description?: string | null
+          dia_firma_kodu?: number | null
           dia_raw_data?: Json | null
           dia_record_id: string
           document_no: string
@@ -199,6 +201,7 @@ export type Database = {
           created_at?: string | null
           currency?: string | null
           description?: string | null
+          dia_firma_kodu?: number | null
           dia_raw_data?: Json | null
           dia_record_id?: string
           document_no?: string

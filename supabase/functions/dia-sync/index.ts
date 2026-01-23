@@ -300,6 +300,7 @@ Deno.serve(async (req) => {
           status: "pending",
           attachment_url: attachmentUrl,
           dia_raw_data: record,
+          dia_firma_kodu: profile.dia_firma_kodu,
         });
       }
     }
