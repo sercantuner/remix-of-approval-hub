@@ -16,6 +16,7 @@ interface ModuleMapping {
   counterpartyField: string;
   codeField: string | null;
   approvalField?: string;
+  groupField?: string;  // Aynı değere sahip kayıtları gruplandırmak için
 }
 
 const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
@@ -36,8 +37,9 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     docField: "fisno", 
     amountField: "borc", 
     dateField: "tarih", 
-    counterpartyField: "cariunvan",  // cariunvan veya unvan alanından al
-    codeField: "carikodu"
+    counterpartyField: "cariunvan",
+    codeField: "carikodu",
+    groupField: "_key_scf_carihesap_fisi"  // Aynı fiş key'ine sahip satırları grupla
   },
   bank: { 
     method: "bcs_banka_fisi_listele_ayrintili",  // Ayrıntılı listele - her hareket ayrı satır

@@ -38,6 +38,12 @@ export interface Transaction {
   /** Number of movements inside the grouped transaction (mainly for bank). */
   movementCount?: number;
 
+  /** Group key for current_account transactions - same _key_scf_carihesap_fisi share same group */
+  groupKey?: string;
+
+  /** Child transactions when this is a grouped parent */
+  childTransactions?: Transaction[];
+
   /** UI-only: indicates the transaction is being processed in the queue */
   _processing?: boolean;
 

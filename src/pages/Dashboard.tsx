@@ -53,6 +53,57 @@ const SYNC_STEPS = [
   { id: "save", label: "Veriler kaydediliyor..." },
 ];
 
+// Group current_account transactions by _key_scf_carihesap_fisi
+function groupCurrentAccountTransactions(transactions: Transaction[]): Transaction[] {
+  const result: Transaction[] = [];
+  const currentAccountMap = new Map<string, Transaction[]>();
+
+  for (const t of transactions) {
+    if (t.type === "current_account" && t.groupKey) {
+      const existing = currentAccountMap.get(t.groupKey) || [];
+      existing.push(t);
+      currentAccountMap.set(t.groupKey, existing);
+    } else {
+      result.push(t);
+    }
+  }
+
+  // Create grouped transactions
+  for (const [groupKey, items] of currentAccountMap.entries()) {
+    if (items.length === 1) {
+      // Single item - no need to group
+      result.push(items[0]);
+    } else {
+      // Multiple items - create a parent transaction
+      const firstItem = items[0];
+      const totalAmount = items.reduce((sum, t) => sum + t.amount, 0);
+      
+      // Use the first item's info as the parent
+      const grouped: Transaction = {
+        id: `group-${groupKey}`,
+        type: "current_account",
+        description: firstItem.description,
+        amount: totalAmount,
+        currency: firstItem.currency,
+        exchangeRate: firstItem.exchangeRate,
+        date: firstItem.date,
+        documentNo: firstItem.documentNo,
+        counterparty: firstItem.counterparty,
+        status: firstItem.status,
+        diaRecordId: firstItem.diaRecordId,
+        details: firstItem.details,
+        groupKey,
+        childTransactions: items,
+        sourceTransactionIds: items.map(t => t.id),
+        movementCount: items.length,
+      };
+      result.push(grouped);
+    }
+  }
+
+  return result;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -187,6 +238,11 @@ export default function Dashboard() {
         const type = t.transaction_type as TransactionType;
         const status = (t.status as Transaction["status"]) || "pending";
 
+        // Extract group key for current_account transactions
+        const groupKey = type === "current_account" && rawData?._key_scf_carihesap_fisi
+          ? String(rawData._key_scf_carihesap_fisi)
+          : undefined;
+
         return {
           id: t.id,
           type,
@@ -201,10 +257,14 @@ export default function Dashboard() {
           diaRecordId: t.dia_record_id,
           attachmentUrl: t.attachment_url,
           details: rawData || undefined,
+          groupKey,
         };
       });
 
-      setTransactions(mapped);
+      // Group current_account transactions by groupKey
+      const groupedTransactions = groupCurrentAccountTransactions(mapped);
+
+      setTransactions(groupedTransactions);
     }
 
     setIsLoading(false);
