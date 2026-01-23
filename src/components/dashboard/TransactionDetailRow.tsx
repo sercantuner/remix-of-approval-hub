@@ -144,7 +144,8 @@ function isCurrencyField(fieldName: string): boolean {
 }
 
 // Flatten nested line item fields from DIA API
-function flattenLineItem(item: Record<string, unknown>, transactionType: string): Record<string, unknown> {
+// useForeignCurrency: if true, use dvz (foreign currency) fields instead of TRY fields
+function flattenLineItem(item: Record<string, unknown>, transactionType: string, useForeignCurrency: boolean = false): Record<string, unknown> {
   const flat: Record<string, unknown> = { ...item };
   
   // Get stock name from nested _key_stk_stokkart object
@@ -195,12 +196,22 @@ function flattenLineItem(item: Record<string, unknown>, transactionType: string)
     flat.birim = item.birim || item.birimkodu || '-';
   }
   
-  // Normalize field names (different API responses use different names)
-  flat.birimfiyat = item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
-  flat.tutar = item.tutari || item.tutar || 0;
-  flat.iskonto = item.indirimtutari || item.indirimtoplam || item.iskonto || 0;
-  flat.kdv = item.kdvtutari || item.kdvtutar || item.kdv || 0;
-  flat.net = item.net || (Number(flat.tutar || 0) - Number(flat.iskonto || 0) + Number(flat.kdv || 0));
+  // Normalize field names - use foreign currency fields (dvz suffix) when currency is not TRY
+  if (useForeignCurrency) {
+    // For foreign currency: prioritize dvz fields
+    flat.birimfiyat = item.birimfiyatidvz || item.sonbirimfiyatidvz || item.birimfiyatdvz || item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
+    flat.tutar = item.tutaridvz || item.tutardvz || item.tutari || item.tutar || 0;
+    flat.iskonto = item.indirimtutaridvz || item.indirimdvz || item.indirimtutari || item.indirimtoplam || item.iskonto || 0;
+    flat.kdv = item.kdvtutaridvz || item.kdvdvz || item.kdvtutari || item.kdvtutar || item.kdv || 0;
+    flat.net = item.netdvz || item.net || (Number(flat.tutar || 0) - Number(flat.iskonto || 0) + Number(flat.kdv || 0));
+  } else {
+    // For TRY: use standard fields
+    flat.birimfiyat = item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
+    flat.tutar = item.tutari || item.tutar || 0;
+    flat.iskonto = item.indirimtutari || item.indirimtoplam || item.iskonto || 0;
+    flat.kdv = item.kdvtutari || item.kdvtutar || item.kdv || 0;
+    flat.net = item.net || (Number(flat.tutar || 0) - Number(flat.iskonto || 0) + Number(flat.kdv || 0));
+  }
   flat.miktar = item.miktar || item.adet || 0;
   
   return flat;
@@ -359,12 +370,22 @@ export function TransactionDetailRow({
   const lineItems: [string, unknown[]][] = [];
   const mAltlar: Record<string, unknown>[] = [];
   
-  // Extract totals for footer
-  const totals = {
-    toplam: detailData?.toplam || detailData?.toplamdvz,
-    toplamindirim: detailData?.toplamindirim || detailData?.toplamindirimdvz,
-    toplamkdv: detailData?.toplamkdv || detailData?.toplamkdvdvz,
-    net: detailData?.net || detailData?.netdvz,
+  // Check if this is a foreign currency transaction (currency != TRY and dovizkuru != 1)
+  const currencyCode = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
+  const exchangeRate = parseFloat(String(detailData?.dovizkuru || 1));
+  const isForeignCurrency = currencyCode !== 'TRY' && exchangeRate !== 1;
+
+  // Extract totals for footer - use foreign currency fields when applicable
+  const totals = isForeignCurrency ? {
+    toplam: detailData?.toplamdvz ?? detailData?.toplam,
+    toplamindirim: detailData?.toplamindirimdvz ?? detailData?.toplamindirim,
+    toplamkdv: detailData?.toplamkdvdvz ?? detailData?.toplamkdv,
+    net: detailData?.netdvz ?? detailData?.net,
+  } : {
+    toplam: detailData?.toplam ?? detailData?.toplamdvz,
+    toplamindirim: detailData?.toplamindirim ?? detailData?.toplamindirimdvz,
+    toplamkdv: detailData?.toplamkdv ?? detailData?.toplamkdvdvz,
+    net: detailData?.net ?? detailData?.netdvz,
   };
 
   if (detailData) {
@@ -407,7 +428,7 @@ export function TransactionDetailRow({
   const userId = detailData?._user as number | undefined;
   const userName = resolveUserName(detailData || {}, userId) || (userId ? userNames[userId] : null);
 
-  const currency = (detailData?.dovizturu as string) || transaction.currency || 'TRY';
+  const currency = currencyCode;
   
   // Get document type (belge türü) - prioritize transaction.details (from sync) since detailData doesn't have turuack
   const transactionDetails = transaction.details as Record<string, unknown> | undefined;
@@ -514,10 +535,11 @@ export function TransactionDetailRow({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(items as Record<string, unknown>[]).map((item, idx) => {
+                    {(items as Record<string, unknown>[]).map((item, idx) => {
                         // Flatten nested fields for types with exact columns
+                        // Pass isForeignCurrency to use dvz fields for foreign currency transactions
                         const flatItem = useExactColumns 
-                          ? flattenLineItem(item, transaction.type) 
+                          ? flattenLineItem(item, transaction.type, isForeignCurrency) 
                           : item;
                         return (
                           <TableRow key={idx} className="hover:bg-muted/30">
@@ -598,23 +620,27 @@ export function TransactionDetailRow({
           {['invoice', 'order'].includes(transaction.type) && (
             <div className="bg-background rounded-lg border overflow-hidden">
               <div className="divide-y divide-border">
-                {/* Ara Toplam */}
+                {/* Alt Toplam */}
                 <div className="flex justify-between items-center px-4 py-2">
-                  <span className="text-sm text-muted-foreground">Ara Toplam</span>
+                  <span className="text-sm text-muted-foreground">
+                    {isForeignCurrency ? 'Döviz Alt Toplam' : 'Alt Toplam'}
+                  </span>
                   <span className="text-sm font-medium tabular-nums">
                     {formatValueWithCurrency(totals.toplam, 'toplam', currency)}
                   </span>
                 </div>
                 {/* Toplam İndirim */}
                 <div className="flex justify-between items-center px-4 py-2">
-                  <span className="text-sm text-muted-foreground">Toplam İndirim</span>
+                  <span className="text-sm text-muted-foreground">
+                    {isForeignCurrency ? 'Döviz İndirim' : 'Toplam İndirim'}
+                  </span>
                   <span className="text-sm font-medium tabular-nums text-orange-600">
                     {formatValueWithCurrency(totals.toplamindirim, 'toplamindirim', currency)}
                   </span>
                 </div>
                 {/* Ara Toplam (İndirim Sonrası) */}
                 <div className="flex justify-between items-center px-4 py-2">
-                  <span className="text-sm text-muted-foreground">Ara Toplam (İndirim Sonrası)</span>
+                  <span className="text-sm text-muted-foreground">Ara Toplam</span>
                   <span className="text-sm font-medium tabular-nums">
                     {formatValueWithCurrency(
                       (Number(totals.toplam || 0) - Number(totals.toplamindirim || 0)),
@@ -625,14 +651,18 @@ export function TransactionDetailRow({
                 </div>
                 {/* Toplam KDV */}
                 <div className="flex justify-between items-center px-4 py-2">
-                  <span className="text-sm text-muted-foreground">Toplam KDV</span>
+                  <span className="text-sm text-muted-foreground">
+                    {isForeignCurrency ? 'Döviz KDV' : 'Toplam KDV'}
+                  </span>
                   <span className="text-sm font-medium tabular-nums">
                     {formatValueWithCurrency(totals.toplamkdv, 'toplamkdv', currency)}
                   </span>
                 </div>
                 {/* Genel Toplam (Net) */}
                 <div className="flex justify-between items-center px-4 py-3 bg-muted/30">
-                  <span className="text-sm font-semibold">Genel Toplam (Net)</span>
+                  <span className="text-sm font-semibold">
+                    {isForeignCurrency ? 'Döviz Net' : 'Genel Toplam (Net)'}
+                  </span>
                   <span className="text-base font-bold tabular-nums text-primary">
                     {formatValueWithCurrency(totals.net, 'net', currency)}
                   </span>
