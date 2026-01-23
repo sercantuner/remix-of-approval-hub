@@ -26,7 +26,7 @@ const getTargetStatus = (action: ActionType): TransactionStatus => {
   switch (action) {
     case 'approve': return 'approved';
     case 'reject': return 'rejected';
-    case 'analyze': return 'pending';
+    case 'analyze': return 'analyzing';
     default: return 'pending';
   }
 };

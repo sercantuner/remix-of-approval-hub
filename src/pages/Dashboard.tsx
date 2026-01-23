@@ -13,6 +13,7 @@ import {
   Server,
   Mail,
   Bell,
+  Eye,
 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -57,7 +58,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeCategory, setActiveCategory] = useState<TransactionType | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected" | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected" | "analyzing" | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -309,8 +310,8 @@ export default function Dashboard() {
     if (statusFilter) {
       filtered = filtered.filter((t) => t.status === statusFilter);
     } else {
-      // Default: show pending
-      filtered = filtered.filter((t) => t.status === "pending");
+      // Default: show pending and analyzing
+      filtered = filtered.filter((t) => t.status === "pending" || t.status === "analyzing");
     }
 
     if (activeCategory) {
@@ -333,10 +334,11 @@ export default function Dashboard() {
   const stats = useMemo(() => {
     const approved = transactions.filter((t) => t.status === "approved").length;
     const rejected = transactions.filter((t) => t.status === "rejected").length;
+    const analyzing = transactions.filter((t) => t.status === "analyzing").length;
     const pending = pendingTransactions.length;
     const total = transactions.length;
 
-    return { approved, rejected, pending, total };
+    return { approved, rejected, analyzing, pending, total };
   }, [transactions, pendingTransactions]);
 
   // Optimistic approve - no waiting
@@ -620,13 +622,20 @@ export default function Dashboard() {
 
         <div className="p-6 space-y-6">
           {/* Stats Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard 
               title="Bekleyen İşlemler" 
               value={stats.pending} 
               icon={Clock} 
               variant={statusFilter === null ? "primary" : "default"}
               onClick={() => setStatusFilter(null)}
+            />
+            <StatCard 
+              title="İnceleniyor" 
+              value={stats.analyzing} 
+              icon={Eye}
+              variant={statusFilter === "analyzing" ? "primary" : "default"}
+              onClick={() => setStatusFilter(statusFilter === "analyzing" ? null : "analyzing")}
             />
             <StatCard
               title="Onaylanan"
@@ -692,9 +701,10 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold">
                 {statusFilter === "approved" ? "Onaylanan İşlemler" :
                  statusFilter === "rejected" ? "Reddedilen İşlemler" :
+                 statusFilter === "analyzing" ? "İncelenen İşlemler" :
                  activeCategory
                   ? groups.find((g) => g.type === activeCategory)?.label
-                  : "Tüm Onay Bekleyen İşlemler"}
+                  : "Onay Bekleyen İşlemler"}
               </h2>
               <div className="flex items-center gap-3">
                 <div className="relative">
