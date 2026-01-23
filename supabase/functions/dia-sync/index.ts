@@ -618,6 +618,11 @@ Deno.serve(async (req) => {
         
         console.log(`[dia-sync] Record ${diaKey} (parent: ${parentKey}) - üst işlem: ${record._key_sis_ust_islem_turu} -> status: ${status}, _owner: ${ownerUserId}`);
 
+        // Merge owner into dia_raw_data so UI can read it
+        const diaRawData = ownerUserId 
+          ? { ...record, _owner: ownerUserId } 
+          : record;
+
         transactionsToUpsert.push({
           user_id: userId,
           dia_record_id: `${mapping.method}-${diaKey}`,
@@ -630,7 +635,7 @@ Deno.serve(async (req) => {
           transaction_date: record[mapping.dateField] || new Date().toISOString().split("T")[0],
           status,
           attachment_url: attachmentUrl,
-          dia_raw_data: record,
+          dia_raw_data: diaRawData,
           dia_firma_kodu: profile.dia_firma_kodu,
         });
       }
