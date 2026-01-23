@@ -196,14 +196,26 @@ function flattenLineItem(item: Record<string, unknown>, transactionType: string,
     flat.birim = item.birim || item.birimkodu || '-';
   }
   
-  // Normalize field names - use foreign currency fields (dvz suffix) when currency is not TRY
+  // Normalize field names - use foreign currency fields when currency is not TRY
   if (useForeignCurrency) {
-    // For foreign currency: prioritize dvz fields (check all possible naming conventions)
-    flat.birimfiyat = item.birimfiyatdvz || item.birimfiyatidvz || item.sonbirimfiyatidvz || item.sonbirimfiyatdvz || item.dvzbirimfiyat || item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
-    flat.tutar = item.tutardvz || item.tutaridvz || item.dvztutar || item.tutari || item.tutar || 0;
-    flat.iskonto = item.indirimtutardvz || item.indirimtutaridvz || item.indirimtoplamdvz || item.indirimdvz || item.dvzindirim || item.indirimtutari || item.indirimtoplam || item.iskonto || 0;
-    flat.kdv = item.kdvtutardvz || item.kdvtutaridvz || item.kdvdvz || item.dvzkdv || item.kdvtutari || item.kdvtutar || item.kdv || 0;
-    flat.net = item.netdvz || item.dvznet || item.net || (Number(flat.tutar || 0) - Number(flat.iskonto || 0) + Number(flat.kdv || 0));
+    // For foreign currency invoices:
+    // - birimfiyati is already in foreign currency
+    // - tutari, indirimtutari, kdvtutari are in TRY - divide by exchange rate to get foreign currency
+    const kur = parseFloat(String(item.dovizkuru || 1));
+    const effectiveKur = kur > 0 ? kur : 1;
+    
+    // birimfiyati is the foreign currency unit price
+    flat.birimfiyat = item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
+    
+    // Convert TRY amounts to foreign currency by dividing by exchange rate
+    const tutariTRY = parseFloat(String(item.tutari || item.tutar || 0));
+    const indirimTRY = parseFloat(String(item.indirimtutari || item.indirimtoplam || item.iskonto || 0));
+    const kdvTRY = parseFloat(String(item.kdvtutari || item.kdvtutar || item.kdv || 0));
+    
+    flat.tutar = effectiveKur > 1 ? tutariTRY / effectiveKur : tutariTRY;
+    flat.iskonto = effectiveKur > 1 ? indirimTRY / effectiveKur : indirimTRY;
+    flat.kdv = effectiveKur > 1 ? kdvTRY / effectiveKur : kdvTRY;
+    flat.net = Number(flat.tutar) - Number(flat.iskonto) + Number(flat.kdv);
   } else {
     // For TRY: use standard fields
     flat.birimfiyat = item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
