@@ -398,13 +398,13 @@ export function TransactionTable({
                     </td>
                     <td className="p-4">
                       {(() => {
-                        // _user is stored in dia_raw_data which is passed as details
+                        // _owner is stored in dia_raw_data which is passed as details
                         const rawData = transaction.details as Record<string, unknown> | undefined;
-                        const userId = rawData?._user as number | undefined;
-                        const userName = userId ? (userNames[userId] || getCachedUserName(userId)) : null;
+                        const ownerId = rawData?._owner as number | undefined;
+                        const userName = ownerId ? (userNames[ownerId] || getCachedUserName(ownerId)) : null;
                         
                         // If we have a userId but no name yet, try to show loading indicator
-                        if (userId && !userName && Object.keys(userNames).length === 0) {
+                        if (ownerId && !userName && Object.keys(userNames).length === 0) {
                           return <span className="text-sm text-muted-foreground">...</span>;
                         }
                         
