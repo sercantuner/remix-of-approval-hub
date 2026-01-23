@@ -216,11 +216,10 @@ function determineStatus(
   if (!ustIslemKey && parentUstIslemMap) {
     const parentKey = record._key_scf_carihesap_fisi || record._key_bcs_banka_fisi;
     if (parentKey) {
-      const parentKeyNum = typeof parentKey === "number" ? parentKey : parseInt(parentKey);
+      // Convert to number consistently - parentKey could be string or number
+      const parentKeyNum = typeof parentKey === "number" ? parentKey : parseInt(String(parentKey));
       ustIslemKey = parentUstIslemMap.get(parentKeyNum);
-      if (ustIslemKey) {
-        console.log(`[dia-sync] Got üst işlem key ${ustIslemKey} from parent ${parentKeyNum}`);
-      }
+      console.log(`[dia-sync] Looking up parent ${parentKeyNum} in map, found üst işlem key: ${ustIslemKey}`);
     }
   }
   
@@ -284,22 +283,21 @@ async function fetchParentUstIslemMap(
     console.log(`[dia-sync] Parent ${txType}: Found ${records.length} receipts`);
     
     // Build map: _key -> _key_sis_ust_islem_turu
+    // IMPORTANT: Use consistent number keys for reliable lookup
     const ustIslemMap = new Map<number, number | null>();
     for (const record of records) {
       const key = record._key;
       const ustIslemKey = record._key_sis_ust_islem_turu;
       if (key) {
-        ustIslemMap.set(key, ustIslemKey || null);
-        // Log specific key for debugging WS67955098 issue (parent key: 2446798)
-        if (key === 2446798 || ustIslemKey) {
-          console.log(`[dia-sync] Parent map entry: _key=${key}, _key_sis_ust_islem_turu=${ustIslemKey}`);
-        }
+        // Convert key to number for consistent lookup
+        const keyNum = typeof key === "number" ? key : parseInt(String(key));
+        const ustKeyNum = ustIslemKey ? (typeof ustIslemKey === "number" ? ustIslemKey : parseInt(String(ustIslemKey))) : null;
+        ustIslemMap.set(keyNum, ustKeyNum);
+        console.log(`[dia-sync] Parent map entry: _key=${keyNum} (type: number), _key_sis_ust_islem_turu=${ustKeyNum}`);
       }
     }
     
-    // Log first few entries for debugging
-    const entries = Array.from(ustIslemMap.entries()).slice(0, 10);
-    console.log(`[dia-sync] Built üst işlem map for ${txType} with ${ustIslemMap.size} entries. Sample: ${JSON.stringify(entries)}`);
+    console.log(`[dia-sync] Built üst işlem map for ${txType} with ${ustIslemMap.size} entries`);
     return ustIslemMap;
   } catch (err) {
     console.error(`[dia-sync] Error fetching parent ${txType}:`, err);
