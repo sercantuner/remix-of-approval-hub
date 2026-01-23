@@ -368,17 +368,15 @@ Deno.serve(async (req) => {
         counterparty = counterparty || "Bilinmiyor";
         
         // Get amount - prefer net field for invoice/order, handle borc/alacak for current_account and bank
-        // For foreign currency invoices/orders, use netdvz (divide net by exchange rate)
+        // For foreign currency invoices/orders, use netdvz field directly
         let amount = 0;
         const exchangeRate = parseFloat(record.dovizkuru) || 1;
         const isForeignCurrency = exchangeRate > 1;
         
         if (txType === "invoice" || txType === "order") {
-          // For foreign currency: use netdvz or calculate from net/exchangeRate
-          if (isForeignCurrency) {
-            const netdvz = parseFloat(record.netdvz);
-            const net = parseFloat(record.net) || 0;
-            amount = !isNaN(netdvz) && netdvz > 0 ? netdvz : net / exchangeRate;
+          // For foreign currency: use netdvz field directly
+          if (isForeignCurrency && record.netdvz !== undefined && record.netdvz !== null) {
+            amount = parseFloat(record.netdvz) || 0;
           } else {
             amount = parseFloat(record.net) || parseFloat(record[mapping.amountField]) || 0;
           }
