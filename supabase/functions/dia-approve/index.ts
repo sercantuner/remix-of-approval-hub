@@ -135,8 +135,7 @@ async function updateDiaInvoice(
     kart.ustislemturuack = "MUHASEBELEŞİR";
     kart.ekalan5 = "Onaylandı";
   } else {
-    // Reject - set ustislemturuack and ekalan5
-    kart.ustislemturuack = "MUHASEBELEŞMEYECEKTİR";
+    // Reject - only set ekalan5, do NOT send ustislemturuack
     kart.ekalan5 = `RED : ${reason || "Belirtilmedi"}`;
   }
 
