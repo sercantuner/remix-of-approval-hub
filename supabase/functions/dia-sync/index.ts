@@ -290,10 +290,16 @@ async function fetchParentUstIslemMap(
       const ustIslemKey = record._key_sis_ust_islem_turu;
       if (key) {
         ustIslemMap.set(key, ustIslemKey || null);
+        // Log specific key for debugging WS67955098 issue (parent key: 2446798)
+        if (key === 2446798 || ustIslemKey) {
+          console.log(`[dia-sync] Parent map entry: _key=${key}, _key_sis_ust_islem_turu=${ustIslemKey}`);
+        }
       }
     }
     
-    console.log(`[dia-sync] Built üst işlem map for ${txType} with ${ustIslemMap.size} entries`);
+    // Log first few entries for debugging
+    const entries = Array.from(ustIslemMap.entries()).slice(0, 10);
+    console.log(`[dia-sync] Built üst işlem map for ${txType} with ${ustIslemMap.size} entries. Sample: ${JSON.stringify(entries)}`);
     return ustIslemMap;
   } catch (err) {
     console.error(`[dia-sync] Error fetching parent ${txType}:`, err);
