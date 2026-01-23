@@ -150,10 +150,32 @@ export default function Dashboard() {
   const loadTransactions = async () => {
     setIsLoading(true);
     
-    const { data, error } = await supabase
+    // Get current user's firma_kodu from profile
+    const { data: { session } } = await supabase.auth.getSession();
+    let currentFirmaKodu: number | null = null;
+    
+    if (session) {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("dia_firma_kodu")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      
+      currentFirmaKodu = profileData?.dia_firma_kodu || null;
+    }
+    
+    // Build query - filter by firma_kodu if available
+    let query = supabase
       .from("pending_transactions")
       .select("*")
       .order("transaction_date", { ascending: false });
+    
+    // Only show transactions for the current firma_kodu
+    if (currentFirmaKodu !== null) {
+      query = query.eq("dia_firma_kodu", currentFirmaKodu);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error loading transactions:", error);
