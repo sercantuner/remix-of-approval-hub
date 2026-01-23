@@ -1,58 +1,85 @@
 
-# Kasa Fişleri ACBO/ACAL Filtreleme Planı
 
-## Problem Özeti
-Kasa fişlerinde "ACBO" (Açılış Borç) ve "ACAL" (Açılış Alacak) fiş türleri açılış fişleri olduğu için listelenmemeli. Ayrıca mevcut veritabanında bu türdeki kayıtlar da temizlenmeli.
+# Masaüstü Mobil Preview'da Swipe Desteği
 
-## Mevcut Veritabanı Durumu
-```
-id: c2623774-f192-4479-b90d-0df4531f0670 | document_no: 000007 | turu: ACBO
-id: f1553914-bdab-44ed-9d11-a56a410ba5e6 | document_no: 000008 | turu: ACAL
-```
+## Problem
+Mobil kart bileşeninde sadece dokunmatik ekran event'leri (`touchstart`, `touchmove`, `touchend`) kullanılıyor. Masaüstü tarayıcıda mobil görünümü test ederken bu event'ler tetiklenmiyor çünkü fare kullanılıyor.
 
-## Yapılacak Değişiklikler
+## Çözüm
+Hem touch hem de mouse event'lerini destekleyen unified bir gesture sistemi eklenecek.
 
-### 1. Edge Function Filtreleme
-**Dosya:** `supabase/functions/dia-sync/index.ts`
+---
 
-Mevcut filtreleme yapısına (satır 507-536 civarı) kasa fişleri için yeni bir filtre eklenecek:
+## Teknik Değişiklikler
+
+### `src/components/dashboard/MobileTransactionCard.tsx`
+
+1. **Mouse Event Handler'ları Ekle**
+   - `onMouseDown` → `handleMouseDown` (swipe başlangıcı)
+   - `onMouseMove` → `handleMouseMove` (swipe hareketi)
+   - `onMouseUp` → `handleMouseUp` (swipe sonu)
+   - `onMouseLeave` → `handleMouseLeave` (kart dışına çıkıldığında sıfırla)
+
+2. **Ortak Gesture Logic**
+   - Touch ve mouse event'leri için ortak `startSwipe`, `updateSwipe`, `endSwipe` fonksiyonları
+   - Kod tekrarını önlemek için shared logic
+
+3. **Pointer Events Alternatifi**
+   - Modern `onPointerDown`, `onPointerMove`, `onPointerUp` API'leri kullanılarak hem touch hem mouse tek event ile desteklenebilir (daha temiz çözüm)
+
+---
+
+## Uygulama Detayları
 
 ```typescript
-// Filter out cash records with turu = 'ACBO' or 'ACAL' (açılış fişleri)
-if (txType === "cash") {
-  const beforeCount = filteredRecords.length;
-  filteredRecords = filteredRecords.filter((r: any) => {
-    const turu = r.turu || "";
-    const isOpening = turu === "ACBO" || turu === "ACAL" || 
-                      turu.toUpperCase() === "ACBO" || turu.toUpperCase() === "ACAL";
-    if (isOpening) {
-      console.log(`[dia-sync] Filtering out ${turu} cash record: ${r.fisno}`);
-    }
-    return !isOpening;
-  });
-  console.log(`[dia-sync] cash: Filtered ${beforeCount - filteredRecords.length} ACBO/ACAL records, ${filteredRecords.length} remaining`);
-}
+// Pointer events ile unified çözüm
+const handlePointerDown = useCallback((e: React.PointerEvent) => {
+  if (isProcessing || transaction.status !== 'pending') return;
+  e.currentTarget.setPointerCapture(e.pointerId);
+  startX.current = e.clientX;
+  setIsDragging(true);
+  // ... reset states
+}, [isProcessing, transaction.status]);
+
+const handlePointerMove = useCallback((e: React.PointerEvent) => {
+  if (!isDragging || isProcessing) return;
+  const diff = e.clientX - startX.current;
+  setOffsetX(diff);
+  // ... haptic ve threshold logic
+}, [isDragging, isProcessing]);
+
+const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  e.currentTarget.releasePointerCapture(e.pointerId);
+  // ... approve/reject logic
+}, [/* dependencies */]);
 ```
 
-### 2. Veritabanı Temizleme
-Edge function deploy edildikten sonra, mevcut ACBO/ACAL kayıtlarını silmek için SQL çalıştırılacak:
+4. **Card Element Güncelleme**
+   ```tsx
+   <div
+     onPointerDown={handlePointerDown}
+     onPointerMove={handlePointerMove}
+     onPointerUp={handlePointerUp}
+     onPointerCancel={handlePointerCancel}
+     style={{ touchAction: 'pan-y' }} // Dikey scroll'a izin ver
+   >
+   ```
 
-```sql
-DELETE FROM pending_transactions 
-WHERE transaction_type = 'cash' 
-AND (dia_raw_data->>'turu' = 'ACBO' OR dia_raw_data->>'turu' = 'ACAL');
-```
+---
 
-## Teknik Detaylar
+## Avantajlar
 
-| Alan | Değer |
-|------|-------|
-| Filtreleme Konumu | Satır 537 civarı (bank filtresinden sonra) |
-| Etkilenen Tür | `cash` (kasa işlemleri) |
-| Filtrelenen Değerler | `ACBO`, `ACAL` |
-| Silme Kriteri | `dia_raw_data->>'turu'` alanı |
+| Özellik | Mevcut Durum | Sonrası |
+|---------|--------------|---------|
+| Mobil Cihaz | ✅ Çalışıyor | ✅ Çalışıyor |
+| Masaüstü Preview | ❌ Çalışmıyor | ✅ Çalışacak |
+| Kod Karmaşıklığı | Touch only | Pointer Events (daha temiz) |
 
-## Sonuç
-- Yeni senkronizasyonlarda ACBO/ACAL kasa fişleri listelenmeyecek
-- Mevcut ACBO/ACAL kayıtları veritabanından silinecek
-- Diğer kasa işlemleri (TAH, ODM, CEK, YAT, vb.) etkilenmeyecek
+---
+
+## Dosya Değişiklikleri
+
+| Dosya | İşlem |
+|-------|-------|
+| `src/components/dashboard/MobileTransactionCard.tsx` | Touch event'leri Pointer event'lere dönüştür |
+
