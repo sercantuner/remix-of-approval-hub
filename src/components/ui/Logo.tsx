@@ -28,10 +28,13 @@ export function Logo({ size = 'md', className, showText = true }: LogoProps) {
         <span className="text-primary-foreground font-bold text-lg">S</span>
       </div>
       {showText && (
-        <span className={cn(
-          'font-semibold tracking-tight text-foreground',
-          textSizes[size]
-        )}>
+        <span 
+          className={cn(
+            'tracking-tight text-white',
+            textSizes[size]
+          )}
+          style={{ fontFamily: "'Dancing Script', cursive" }}
+        >
           Sümen
         </span>
       )}
