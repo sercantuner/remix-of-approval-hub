@@ -1,102 +1,139 @@
 
 
-# DIA Fatura Onay/Red Güncelleme Planı
+# DIA Güncelleme Sonuçlarını Dashboard'da Gösterme Planı
 
-Bu plan, fatura onay veya red işlemlerinde DIA ERP sistemine otomatik güncelleme gönderilmesini sağlar.
+## Mevcut Durum Analizi
+
+Son işlem incelemesi:
+- **Transaction ID:** `82222355-1e1d-402b-b710-60dc0761acd6`
+- **Belge No:** `000001` (Fatura)
+- **DIA _key:** `2444754`
+- **Durum:** Onaylandı
+
+Log mesajında `"Would update DIA record"` yazıyor ve `dia_response` alanında `simulated: true` görülüyor. Bu, edge function'ın henüz gerçek DIA API çağrısı yapmadığını gösteriyor. Yeni kod deploy edilince gerçek DIA yanıtları gelecek.
 
 ## Yapılacak İşlemler
 
-### 1. dia-approve Edge Function Güncelleme
+### 1. diaApprove Fonksiyonunun Sonuç Döndürmesi
 
-Mevcut `dia-approve` fonksiyonunu, fatura işlemlerinde DIA API'sine güncelleme gönderecek şekilde düzenleyeceğiz.
+`diaApi.ts` dosyasındaki `diaApprove` fonksiyonu zaten sonuçları döndürüyor. Dashboard'da bu sonuçları işlememiz gerekiyor.
 
-**Onay Durumu:**
-```json
-{
-  "scf_fatura_guncelle": {
-    "session_id": "{session_id}",
-    "firma_kodu": {firma_kodu},
-    "donem_kodu": {donem_kodu},
-    "kart": {
-      "_key": {_key değeri},
-      "ustislemack": "MUHASEBELEŞEBİLİR",
-      "ekalan5": "Onaylandı"
-    }
-  }
-}
-```
+### 2. Dashboard'da Toast Bildirimleri Güncelleme
 
-**Red Durumu:**
-```json
-{
-  "scf_fatura_guncelle": {
-    "session_id": "{session_id}",
-    "firma_kodu": {firma_kodu},
-    "donem_kodu": {donem_kodu},
-    "kart": {
-      "_key": {_key değeri},
-      "ekalan5": "RED : {red_nedeni}"
-    }
-  }
-}
-```
+Onay/red işlemlerinden dönen DIA sonuçlarını kullanıcıya göstereceğiz:
 
-### 2. İş Akışı
+| Durum | Mesaj |
+|-------|-------|
+| DIA Başarılı | "İşlem DIA'da güncellendi ✓" |
+| DIA Başarısız | "Yerel onay kaydedildi, DIA güncellenemedi: {hata}" |
+| DIA Bağlantısı Yok | "Yerel onay kaydedildi" |
 
-1. Kullanıcı faturayı onaylar veya reddeder
-2. Sistem `pending_transactions` tablosundan `dia_raw_data._key` değerini alır
-3. Kullanıcının profil bilgilerinden DIA session bilgileri alınır
-4. İşlem türü kontrol edilir (sadece `invoice` türü için DIA güncellemesi yapılır)
-5. DIA API'sine `scf_fatura_guncelle` isteği gönderilir
-6. DIA yanıtı `approval_history.dia_response` alanına kaydedilir
-7. Yerel veritabanı güncellenir
+### 3. Detaylı Sonuç Gösterimi
 
-### 3. Hata Yönetimi
+Toplu işlemlerde her işlemin DIA sonucunu göstermek için:
+- Toast yerine veya ek olarak bir sonuç özeti dialog'u açılacak
+- Her işlem için başarı/başarısızlık durumu listelenecek
 
-- DIA API hatası durumunda işlem yerel olarak kaydedilir ama hata loglanır
-- Session süresi dolmuşsa otomatik yenileme yapılır
-- `_key` değeri bulunamazsa DIA güncellemesi atlanır
-
----
-
-## Teknik Detaylar
-
-### Değiştirilecek Dosyalar
+## Değiştirilecek Dosyalar
 
 | Dosya | Değişiklik |
 |-------|------------|
-| `supabase/functions/dia-approve/index.ts` | DIA fatura güncelleme mantığı eklenir |
+| `src/pages/Dashboard.tsx` | `handleApprove` ve `handleRejectConfirm` fonksiyonlarını DIA sonuçlarını işleyecek şekilde güncelle |
+| `src/components/dashboard/DiaResultDialog.tsx` | (Yeni) DIA sonuçlarını gösteren dialog bileşeni |
 
-### Yeni Fonksiyonlar
+## Uygulama Detayları
+
+### Dashboard.tsx Değişiklikleri
 
 ```typescript
-// DIA oturumu kontrolü ve otomatik yenileme
-async function getValidDiaSession(supabase, userId): Promise<DiaSession | null>
-
-// Fatura güncelleme isteği gönderme
-async function updateDiaInvoice(session: DiaSession, key: number, action: 'approve' | 'reject', reason?: string): Promise<DiaUpdateResponse>
+const handleApprove = async (ids: string[]) => {
+  try {
+    const result = await diaApprove(ids, "approve");
+    await loadTransactions();
+    setSelectedIds([]);
+    setSelectedTransaction(null);
+    
+    // DIA sonuçlarını işle
+    const diaUpdated = result.diaUpdated || 0;
+    const failed = result.results?.filter(r => r.diaUpdated === false && r.success) || [];
+    
+    if (diaUpdated === ids.length) {
+      toast({
+        title: "İşlemler Onaylandı",
+        description: `${ids.length} işlem DIA'da başarıyla güncellendi.`,
+      });
+    } else if (diaUpdated > 0) {
+      toast({
+        title: "Kısmi DIA Güncellemesi",
+        description: `${diaUpdated}/${ids.length} işlem DIA'da güncellendi.`,
+        variant: "default",
+      });
+    } else {
+      toast({
+        title: "İşlemler Onaylandı",
+        description: `${ids.length} işlem yerel olarak kaydedildi.`,
+      });
+    }
+  } catch (error) {
+    // ... hata işleme
+  }
+};
 ```
 
-### API Endpoint
+### DiaResultDialog Bileşeni (Opsiyonel - Detaylı Görünüm)
+
+Toplu işlemlerde her bir işlemin sonucunu gösteren modal:
+
+```typescript
+interface DiaResult {
+  id: string;
+  documentNo: string;
+  success: boolean;
+  diaUpdated: boolean;
+  diaMessage?: string;
+}
+
+// Dialog içeriği:
+// - Başarılı DIA güncellemeleri (yeşil ✓)
+// - Başarısız DIA güncellemeleri (sarı ⚠)
+// - Yerel onaylar (gri bilgi)
+```
+
+## İş Akışı
 
 ```text
-POST https://{sunucu_adi}.ws.dia.com.tr/api/v3/scf/json
++---------------------+
+| Kullanıcı Onaylar   |
++----------+----------+
+           |
+           v
++----------+----------+
+| diaApprove() çağrısı|
++----------+----------+
+           |
+           v
++----------+----------+
+| Edge Function       |
+| - DIA API çağrısı   |
+| - Yerel DB güncelle |
+| - Sonuç döndür      |
++----------+----------+
+           |
+           v
++----------+----------+
+| Dashboard           |
+| - Sonuçları işle    |
+| - Toast göster      |
+| - Tabloyu yenile    |
++---------------------+
 ```
 
-### Güncellenecek Alanlar
+## Önerilen Yaklaşım
 
-| Alan | Onay | Red |
-|------|------|-----|
-| `ustislemack` | "MUHASEBELEŞEBİLİR" | (değişmez) |
-| `ekalan5` | "Onaylandı" | "RED : {neden}" |
+İlk aşamada basit toast bildirimleri ile başlayalım:
+1. DIA sonucu başarılı → Yeşil toast ile "DIA'da güncellendi"
+2. DIA sonucu başarısız → Sarı toast ile "DIA güncellenemedi, yerel kaydedildi"
+3. DIA olmayan işlemler → Normal toast
 
-### Örnek DIA Yanıtı (Beklenen)
-
-```json
-{
-  "code": "200",
-  "msg": "",
-  "result": { "_key": 2440313 }
-}
-```
+İlerleyen aşamada detaylı sonuç dialog'u eklenebilir.
 
