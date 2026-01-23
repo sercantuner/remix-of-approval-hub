@@ -1,61 +1,58 @@
 
-
-# Banka Fişleri için _owner Bilgisini Kaydetme Planı
+# Kasa Fişleri ACBO/ACAL Filtreleme Planı
 
 ## Problem Özeti
-`ownerUserId` değeri parent fişten doğru şekilde alınıyor ve log'a yazılıyor, ancak `dia_raw_data`'ya eklenmeden veritabanına gönderiliyor. Bu yüzden UI'da "Kaydeden" alanı boş görünüyor.
+Kasa fişlerinde "ACBO" (Açılış Borç) ve "ACAL" (Açılış Alacak) fiş türleri açılış fişleri olduğu için listelenmemeli. Ayrıca mevcut veritabanında bu türdeki kayıtlar da temizlenmeli.
 
-## Mevcut Kod (Satır 621-636)
-```typescript
-// ownerUserId hesaplanıyor ama kullanılmıyor
-const ownerUserId = getOwnerFromParent(record, parentReceiptMap);
-
-transactionsToUpsert.push({
-  // ...
-  dia_raw_data: record,  // <-- _owner eklenmemiş!
-});
+## Mevcut Veritabanı Durumu
+```
+id: c2623774-f192-4479-b90d-0df4531f0670 | document_no: 000007 | turu: ACBO
+id: f1553914-bdab-44ed-9d11-a56a410ba5e6 | document_no: 000008 | turu: ACAL
 ```
 
-## Çözüm
-`dia_raw_data`'ya `_owner` alanını ekleyerek kaydetmek.
+## Yapılacak Değişiklikler
 
-## Yapılacak Değişiklik
+### 1. Edge Function Filtreleme
+**Dosya:** `supabase/functions/dia-sync/index.ts`
 
-### 1. dia-sync/index.ts Düzenlemesi
-**Dosya:** `supabase/functions/dia-sync/index.ts`  
-**Satır:** 621-636
+Mevcut filtreleme yapısına (satır 507-536 civarı) kasa fişleri için yeni bir filtre eklenecek:
 
 ```typescript
-// Get owner (_user) from parent receipt for bank transactions
-const ownerUserId = getOwnerFromParent(record, parentReceiptMap);
-
-console.log(`[dia-sync] Record ${diaKey} (parent: ${parentKey}) - üst işlem: ${record._key_sis_ust_islem_turu} -> status: ${status}, _owner: ${ownerUserId}`);
-
-// Merge owner into dia_raw_data so UI can read it
-const diaRawData = ownerUserId 
-  ? { ...record, _owner: ownerUserId } 
-  : record;
-
-transactionsToUpsert.push({
-  user_id: userId,
-  dia_record_id: `${mapping.method}-${diaKey}`,
-  transaction_type: txType,
-  document_no: record[mapping.docField] || diaKey,
-  description: record.aciklama || record.not || docType || `${txType} işlemi`,
-  counterparty,
-  amount,
-  currency,
-  transaction_date: record[mapping.dateField] || new Date().toISOString().split("T")[0],
-  status,
-  attachment_url: attachmentUrl,
-  dia_raw_data: diaRawData,  // <-- _owner artık dahil
-  dia_firma_kodu: profile.dia_firma_kodu,
-});
+// Filter out cash records with turu = 'ACBO' or 'ACAL' (açılış fişleri)
+if (txType === "cash") {
+  const beforeCount = filteredRecords.length;
+  filteredRecords = filteredRecords.filter((r: any) => {
+    const turu = r.turu || "";
+    const isOpening = turu === "ACBO" || turu === "ACAL" || 
+                      turu.toUpperCase() === "ACBO" || turu.toUpperCase() === "ACAL";
+    if (isOpening) {
+      console.log(`[dia-sync] Filtering out ${turu} cash record: ${r.fisno}`);
+    }
+    return !isOpening;
+  });
+  console.log(`[dia-sync] cash: Filtered ${beforeCount - filteredRecords.length} ACBO/ACAL records, ${filteredRecords.length} remaining`);
+}
 ```
+
+### 2. Veritabanı Temizleme
+Edge function deploy edildikten sonra, mevcut ACBO/ACAL kayıtlarını silmek için SQL çalıştırılacak:
+
+```sql
+DELETE FROM pending_transactions 
+WHERE transaction_type = 'cash' 
+AND (dia_raw_data->>'turu' = 'ACBO' OR dia_raw_data->>'turu' = 'ACAL');
+```
+
+## Teknik Detaylar
+
+| Alan | Değer |
+|------|-------|
+| Filtreleme Konumu | Satır 537 civarı (bank filtresinden sonra) |
+| Etkilenen Tür | `cash` (kasa işlemleri) |
+| Filtrelenen Değerler | `ACBO`, `ACAL` |
+| Silme Kriteri | `dia_raw_data->>'turu'` alanı |
 
 ## Sonuç
-Bu değişiklikle:
-- Banka ve cari hesap fişlerinin parent'ından alınan `_user` bilgisi
-- `dia_raw_data._owner` olarak veritabanına yazılacak
-- UI (`TransactionTable.tsx`) bu değeri okuyarak "Kaydeden" sütununda kullanıcı adını gösterecek
-
+- Yeni senkronizasyonlarda ACBO/ACAL kasa fişleri listelenmeyecek
+- Mevcut ACBO/ACAL kayıtları veritabanından silinecek
+- Diğer kasa işlemleri (TAH, ODM, CEK, YAT, vb.) etkilenmeyecek
