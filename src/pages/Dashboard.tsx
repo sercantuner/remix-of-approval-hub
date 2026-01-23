@@ -54,6 +54,7 @@ const SYNC_STEPS = [
 ];
 
 // Group current_account transactions by _key_scf_carihesap_fisi
+// But: If same groupKey has different currencies (e.g., TL + USD), show as separate rows
 function groupCurrentAccountTransactions(transactions: Transaction[]): Transaction[] {
   const result: Transaction[] = [];
   const currentAccountMap = new Map<string, Transaction[]>();
@@ -68,13 +69,28 @@ function groupCurrentAccountTransactions(transactions: Transaction[]): Transacti
     }
   }
 
-  // Create grouped transactions
+  // Create grouped transactions - but separate by currency
   for (const [groupKey, items] of currentAccountMap.entries()) {
-    if (items.length === 1) {
+    // Check if there are multiple currencies in the same group
+    const currencies = new Set(items.map(t => t.currency));
+    
+    if (currencies.size > 1) {
+      // Multiple currencies - don't group, show as individual rows
+      // Each row is independent, no expansion needed
+      for (const item of items) {
+        result.push({
+          ...item,
+          groupKey: undefined, // Remove groupKey so it's not expandable
+          childTransactions: undefined,
+          sourceTransactionIds: undefined,
+          movementCount: undefined,
+        });
+      }
+    } else if (items.length === 1) {
       // Single item - no need to group
       result.push(items[0]);
     } else {
-      // Multiple items - create a parent transaction
+      // Multiple items with same currency - create a parent transaction
       const firstItem = items[0];
       const totalAmount = items.reduce((sum, t) => sum + t.amount, 0);
       

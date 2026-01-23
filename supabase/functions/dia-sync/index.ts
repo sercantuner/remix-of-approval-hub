@@ -346,10 +346,17 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      syncResults[txType] = { count: records.length, success: true };
+      // Filter out current_account records with turu = 'AF'
+      let filteredRecords = records;
+      if (txType === "current_account") {
+        filteredRecords = records.filter((r: any) => r.turu !== "AF");
+        console.log(`[dia-sync] current_account: Filtered ${records.length - filteredRecords.length} AF records, ${filteredRecords.length} remaining`);
+      }
+      
+      syncResults[txType] = { count: filteredRecords.length, success: true };
 
       // Transform and prepare for upsert
-      for (const record of records) {
+      for (const record of filteredRecords) {
         const diaKey = String(record[mapping.keyField] || record._key);
         
         // Get counterparty name - use same flattened field approach for all types
