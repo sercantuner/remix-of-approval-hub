@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { diaApprove } from '@/lib/diaApi';
 import { useToast } from '@/hooks/use-toast';
-import type { Transaction, TransactionStatus, QueueStatus } from '@/types/transaction';
+import type { TransactionStatus, QueueStatus } from '@/types/transaction';
 
 export type ActionType = 'approve' | 'reject' | 'analyze';
 
@@ -21,6 +21,16 @@ interface UseApprovalQueueOptions {
   onPartialSuccess: (transactionId: string) => void;
 }
 
+// Get target status for action
+const getTargetStatus = (action: ActionType): TransactionStatus => {
+  switch (action) {
+    case 'approve': return 'approved';
+    case 'reject': return 'rejected';
+    case 'analyze': return 'pending';
+    default: return 'pending';
+  }
+};
+
 export function useApprovalQueue(options: UseApprovalQueueOptions) {
   const { onOptimisticUpdate, onRollback, onSuccess, onPartialSuccess } = options;
   const { toast } = useToast();
@@ -28,16 +38,12 @@ export function useApprovalQueue(options: UseApprovalQueueOptions) {
   const [queue, setQueue] = useState<QueuedAction[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const processingRef = useRef(false);
-
-  // Get target status for action
-  const getTargetStatus = (action: ActionType): TransactionStatus => {
-    switch (action) {
-      case 'approve': return 'approved';
-      case 'reject': return 'rejected';
-      case 'analyze': return 'pending';
-      default: return 'pending';
-    }
-  };
+  const optionsRef = useRef(options);
+  
+  // Keep options ref updated
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
 
   // Enqueue action with optimistic update
   const enqueue = useCallback((
@@ -70,91 +76,107 @@ export function useApprovalQueue(options: UseApprovalQueueOptions) {
     transactionIds.forEach(id => enqueue(id, action, reason));
   }, [enqueue]);
 
-  // Process next item in queue
-  const processNext = useCallback(async () => {
+  // Process queue - using ref to avoid dependency issues
+  const processQueue = useCallback(async () => {
     if (processingRef.current) return;
     
-    const nextPending = queue.find(q => q.status === 'pending');
-    if (!nextPending) {
-      setIsProcessing(false);
-      return;
-    }
+    // Get current queue state
+    setQueue(currentQueue => {
+      const nextPending = currentQueue.find(q => q.status === 'pending');
+      
+      if (!nextPending) {
+        setIsProcessing(false);
+        return currentQueue;
+      }
 
-    processingRef.current = true;
-    setIsProcessing(true);
+      // Start processing
+      processingRef.current = true;
+      setIsProcessing(true);
 
-    // Mark as processing
-    setQueue(prev => prev.map(q => 
-      q.id === nextPending.id ? { ...q, status: 'processing' as const } : q
-    ));
-    onOptimisticUpdate(nextPending.transactionId, getTargetStatus(nextPending.action), 'processing');
-
-    try {
-      const result = await diaApprove(
-        [nextPending.transactionId], 
-        nextPending.action, 
-        nextPending.reason
+      // Mark item as processing
+      const updatedQueue = currentQueue.map(q => 
+        q.id === nextPending.id ? { ...q, status: 'processing' as const } : q
+      );
+      
+      // Optimistic update for processing state
+      optionsRef.current.onOptimisticUpdate(
+        nextPending.transactionId, 
+        getTargetStatus(nextPending.action), 
+        'processing'
       );
 
-      const diaUpdated = result?.diaUpdated || 0;
-      const results = result?.results || [];
-      const firstResult = results[0];
+      // Process async
+      (async () => {
+        try {
+          const result = await diaApprove(
+            [nextPending.transactionId], 
+            nextPending.action, 
+            nextPending.reason
+          );
 
-      if (firstResult?.diaUpdated) {
-        // Full success - DIA updated
-        setQueue(prev => prev.map(q => 
-          q.id === nextPending.id ? { ...q, status: 'success' as const } : q
-        ));
-        onSuccess(nextPending.transactionId);
-      } else if (firstResult?.success) {
-        // Partial success - local only
-        setQueue(prev => prev.map(q => 
-          q.id === nextPending.id ? { ...q, status: 'success' as const } : q
-        ));
-        onPartialSuccess(nextPending.transactionId);
-        
-        // Show warning toast
-        const errorMsg = firstResult.diaError || 'DIA güncellenemedi';
-        toast({
-          title: '⚠ Yerel Olarak Kaydedildi',
-          description: `İşlem kaydedildi ancak DIA güncellenemedi: ${errorMsg}`,
-        });
-      } else {
-        throw new Error(firstResult?.error || 'İşlem başarısız');
-      }
-    } catch (error) {
-      // Failed - rollback
-      setQueue(prev => prev.map(q => 
-        q.id === nextPending.id ? { 
-          ...q, 
-          status: 'failed' as const,
-          error: error instanceof Error ? error.message : 'Bilinmeyen hata'
-        } : q
-      ));
-      onRollback(nextPending.transactionId);
-      
-      toast({
-        title: 'İşlem Başarısız',
-        description: error instanceof Error ? error.message : 'Bir hata oluştu',
-        variant: 'destructive',
-      });
-    } finally {
-      processingRef.current = false;
-      
-      // Process next after a small delay
-      setTimeout(() => {
-        processNext();
-      }, 100);
-    }
-  }, [queue, onOptimisticUpdate, onSuccess, onPartialSuccess, onRollback, toast]);
+          const results = result?.results || [];
+          const firstResult = results[0];
+
+          if (firstResult?.success) {
+            // Success - mark as success
+            setQueue(prev => prev.map(q => 
+              q.id === nextPending.id ? { ...q, status: 'success' as const } : q
+            ));
+            
+            // Check if DIA was updated or not (only show warning if there was an error)
+            if (firstResult.diaUpdated) {
+              optionsRef.current.onSuccess(nextPending.transactionId);
+            } else if (firstResult.diaError) {
+              // Only show partial success if there was an actual error
+              optionsRef.current.onPartialSuccess(nextPending.transactionId);
+              toast({
+                title: '⚠ Yerel Olarak Kaydedildi',
+                description: `İşlem kaydedildi ancak DIA güncellenemedi: ${firstResult.diaError}`,
+              });
+            } else {
+              // No error, just not a DIA-updateable type - treat as success
+              optionsRef.current.onSuccess(nextPending.transactionId);
+            }
+          } else {
+            throw new Error(firstResult?.error || 'İşlem başarısız');
+          }
+        } catch (error) {
+          // Failed - rollback
+          setQueue(prev => prev.map(q => 
+            q.id === nextPending.id ? { 
+              ...q, 
+              status: 'failed' as const,
+              error: error instanceof Error ? error.message : 'Bilinmeyen hata'
+            } : q
+          ));
+          optionsRef.current.onRollback(nextPending.transactionId);
+          
+          toast({
+            title: 'İşlem Başarısız',
+            description: error instanceof Error ? error.message : 'Bir hata oluştu',
+            variant: 'destructive',
+          });
+        } finally {
+          processingRef.current = false;
+          
+          // Check for more items after a small delay
+          setTimeout(() => {
+            processQueue();
+          }, 100);
+        }
+      })();
+
+      return updatedQueue;
+    });
+  }, [toast]);
 
   // Auto-process queue when items are added
   useEffect(() => {
     const hasPending = queue.some(q => q.status === 'pending');
     if (hasPending && !processingRef.current) {
-      processNext();
+      processQueue();
     }
-  }, [queue, processNext]);
+  }, [queue.length]); // Only trigger on queue length change, not processQueue
 
   // Get queue status for a transaction
   const getQueueStatus = useCallback((transactionId: string): QueueStatus | null => {
