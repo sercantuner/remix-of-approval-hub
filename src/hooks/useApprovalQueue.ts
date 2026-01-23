@@ -32,18 +32,128 @@ const getTargetStatus = (action: ActionType): TransactionStatus => {
 };
 
 export function useApprovalQueue(options: UseApprovalQueueOptions) {
-  const { onOptimisticUpdate, onRollback, onSuccess, onPartialSuccess } = options;
   const { toast } = useToast();
   
   const [queue, setQueue] = useState<QueuedAction[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const processingRef = useRef(false);
+  const queueRef = useRef<QueuedAction[]>([]);
   const optionsRef = useRef(options);
   
   // Keep options ref updated
   useEffect(() => {
     optionsRef.current = options;
   }, [options]);
+  
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
+  // Process a single item
+  const processItem = useCallback(async (item: QueuedAction) => {
+    try {
+      const result = await diaApprove(
+        [item.transactionId], 
+        item.action, 
+        item.reason
+      );
+
+      const results = result?.results || [];
+      const firstResult = results[0];
+
+      if (firstResult?.success) {
+        // Success - mark as success
+        setQueue(prev => prev.map(q => 
+          q.id === item.id ? { ...q, status: 'success' as const } : q
+        ));
+        
+        // Check if DIA was updated or not
+        if (firstResult.diaUpdated) {
+          optionsRef.current.onSuccess(item.transactionId);
+        } else if (firstResult.diaError) {
+          // Only show partial success if there was an actual error
+          optionsRef.current.onPartialSuccess(item.transactionId);
+          toast({
+            title: '⚠ Yerel Olarak Kaydedildi',
+            description: `İşlem kaydedildi ancak DIA güncellenemedi: ${firstResult.diaError}`,
+          });
+        } else {
+          // No error, just not a DIA-updateable type - treat as success
+          optionsRef.current.onSuccess(item.transactionId);
+        }
+        return true;
+      } else {
+        throw new Error(firstResult?.error || 'İşlem başarısız');
+      }
+    } catch (error) {
+      // Failed - rollback
+      setQueue(prev => prev.map(q => 
+        q.id === item.id ? { 
+          ...q, 
+          status: 'failed' as const,
+          error: error instanceof Error ? error.message : 'Bilinmeyen hata'
+        } : q
+      ));
+      optionsRef.current.onRollback(item.transactionId);
+      
+      toast({
+        title: 'İşlem Başarısız',
+        description: error instanceof Error ? error.message : 'Bir hata oluştu',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  }, [toast]);
+
+  // Process queue
+  const processQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    
+    const currentQueue = queueRef.current;
+    const nextPending = currentQueue.find(q => q.status === 'pending');
+    
+    if (!nextPending) {
+      setIsProcessing(false);
+      return;
+    }
+
+    processingRef.current = true;
+    setIsProcessing(true);
+
+    // Mark item as processing
+    setQueue(prev => prev.map(q => 
+      q.id === nextPending.id ? { ...q, status: 'processing' as const } : q
+    ));
+    
+    // Optimistic update for processing state
+    optionsRef.current.onOptimisticUpdate(
+      nextPending.transactionId, 
+      getTargetStatus(nextPending.action), 
+      'processing'
+    );
+
+    // Process the item
+    await processItem(nextPending);
+    
+    processingRef.current = false;
+    
+    // Check for more items
+    setTimeout(() => {
+      processQueue();
+    }, 100);
+  }, [processItem]);
+
+  // Auto-process queue when items are added
+  useEffect(() => {
+    const hasPending = queue.some(q => q.status === 'pending');
+    if (hasPending && !processingRef.current) {
+      // Small delay to batch multiple enqueues
+      const timer = setTimeout(() => {
+        processQueue();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [queue, processQueue]);
 
   // Enqueue action with optimistic update
   const enqueue = useCallback((
@@ -55,7 +165,7 @@ export function useApprovalQueue(options: UseApprovalQueueOptions) {
     
     // Optimistic update
     const targetStatus = getTargetStatus(action);
-    onOptimisticUpdate(transactionId, targetStatus, 'queued');
+    optionsRef.current.onOptimisticUpdate(transactionId, targetStatus, 'queued');
     
     // Add to queue
     setQueue(prev => [...prev, {
@@ -65,7 +175,7 @@ export function useApprovalQueue(options: UseApprovalQueueOptions) {
       reason,
       status: 'pending',
     }]);
-  }, [onOptimisticUpdate]);
+  }, []);
 
   // Batch enqueue for multiple transactions
   const enqueueBatch = useCallback((
@@ -75,108 +185,6 @@ export function useApprovalQueue(options: UseApprovalQueueOptions) {
   ) => {
     transactionIds.forEach(id => enqueue(id, action, reason));
   }, [enqueue]);
-
-  // Process queue - using ref to avoid dependency issues
-  const processQueue = useCallback(async () => {
-    if (processingRef.current) return;
-    
-    // Get current queue state
-    setQueue(currentQueue => {
-      const nextPending = currentQueue.find(q => q.status === 'pending');
-      
-      if (!nextPending) {
-        setIsProcessing(false);
-        return currentQueue;
-      }
-
-      // Start processing
-      processingRef.current = true;
-      setIsProcessing(true);
-
-      // Mark item as processing
-      const updatedQueue = currentQueue.map(q => 
-        q.id === nextPending.id ? { ...q, status: 'processing' as const } : q
-      );
-      
-      // Optimistic update for processing state
-      optionsRef.current.onOptimisticUpdate(
-        nextPending.transactionId, 
-        getTargetStatus(nextPending.action), 
-        'processing'
-      );
-
-      // Process async
-      (async () => {
-        try {
-          const result = await diaApprove(
-            [nextPending.transactionId], 
-            nextPending.action, 
-            nextPending.reason
-          );
-
-          const results = result?.results || [];
-          const firstResult = results[0];
-
-          if (firstResult?.success) {
-            // Success - mark as success
-            setQueue(prev => prev.map(q => 
-              q.id === nextPending.id ? { ...q, status: 'success' as const } : q
-            ));
-            
-            // Check if DIA was updated or not (only show warning if there was an error)
-            if (firstResult.diaUpdated) {
-              optionsRef.current.onSuccess(nextPending.transactionId);
-            } else if (firstResult.diaError) {
-              // Only show partial success if there was an actual error
-              optionsRef.current.onPartialSuccess(nextPending.transactionId);
-              toast({
-                title: '⚠ Yerel Olarak Kaydedildi',
-                description: `İşlem kaydedildi ancak DIA güncellenemedi: ${firstResult.diaError}`,
-              });
-            } else {
-              // No error, just not a DIA-updateable type - treat as success
-              optionsRef.current.onSuccess(nextPending.transactionId);
-            }
-          } else {
-            throw new Error(firstResult?.error || 'İşlem başarısız');
-          }
-        } catch (error) {
-          // Failed - rollback
-          setQueue(prev => prev.map(q => 
-            q.id === nextPending.id ? { 
-              ...q, 
-              status: 'failed' as const,
-              error: error instanceof Error ? error.message : 'Bilinmeyen hata'
-            } : q
-          ));
-          optionsRef.current.onRollback(nextPending.transactionId);
-          
-          toast({
-            title: 'İşlem Başarısız',
-            description: error instanceof Error ? error.message : 'Bir hata oluştu',
-            variant: 'destructive',
-          });
-        } finally {
-          processingRef.current = false;
-          
-          // Check for more items after a small delay
-          setTimeout(() => {
-            processQueue();
-          }, 100);
-        }
-      })();
-
-      return updatedQueue;
-    });
-  }, [toast]);
-
-  // Auto-process queue when items are added
-  useEffect(() => {
-    const hasPending = queue.some(q => q.status === 'pending');
-    if (hasPending && !processingRef.current) {
-      processQueue();
-    }
-  }, [queue.length]); // Only trigger on queue length change, not processQueue
 
   // Get queue status for a transaction
   const getQueueStatus = useCallback((transactionId: string): QueueStatus | null => {
