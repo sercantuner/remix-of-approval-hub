@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
 
       // Only update DIA for invoice type transactions
       if (diaSession && transaction.transaction_type === "invoice" && transaction.dia_raw_data?._key) {
-        const diaKey = transaction.dia_raw_data._key;
+        const diaKey = parseInt(transaction.dia_raw_data._key, 10);
         console.log(`[dia-approve] Updating DIA invoice with _key: ${diaKey}`);
         
         diaResponse = await updateDiaInvoice(diaSession, diaKey, action, reason);
