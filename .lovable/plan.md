@@ -1,61 +1,69 @@
 
+# DIA Fatura Key Düzeltme Planı
 
-# DIA Session Kolon Adı Düzeltme Planı
+## Tespit Edilen Sorunlar
 
-## Tespit Edilen Hata
+### 1. _key String Olarak Gönderiliyor
 
-Edge function kodunda yanlış kolon adı kullanılmış:
+Edge function loglarında:
+```json
+"kart":{"_key":"2444764",...}
+```
 
-| Kodda Kullanılan | Veritabanındaki Doğru Ad |
-|------------------|--------------------------|
-| `dia_session_expiry` | `dia_session_expires` |
+DIA API integer bekliyor, ama kod string gönderiyor. Bu dönüşüm yapılmalı.
 
-Bu hata `getValidDiaSession` fonksiyonunun çalışmamasına neden oluyor.
-
-## Yapılacak Değişiklik
+### 2. Kodda Düzeltme Gerekli
 
 **Dosya:** `supabase/functions/dia-approve/index.ts`
 
-### 1. Select sorgusunda kolon adı düzeltmesi (satır 35)
+Satır 249'da `_key` değeri alınırken integer'a dönüştürülmeli:
 
-```typescript
-// Yanlış:
-.select("dia_sunucu_adi, dia_session_id, dia_firma_kodu, dia_donem_kodu, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_session_expiry")
+```text
+// Mevcut (Yanlış):
+const diaKey = transaction.dia_raw_data._key;
 
-// Doğru:
-.select("dia_sunucu_adi, dia_session_id, dia_firma_kodu, dia_donem_kodu, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_session_expires")
+// Düzeltilmiş (Doğru):
+const diaKey = parseInt(transaction.dia_raw_data._key, 10);
 ```
 
-### 2. Expiry kontrolünde kolon adı düzeltmesi (satır 46)
+Ayrıca `updateDiaInvoice` fonksiyonunda `kart._key` atanırken de kontrol gerekli (satır 131):
 
-```typescript
-// Yanlış:
-const expiry = profile.dia_session_expiry ? new Date(profile.dia_session_expiry) : null;
-
-// Doğru:
-const expiry = profile.dia_session_expires ? new Date(profile.dia_session_expires) : null;
+```text
+// Mevcut - key zaten number olarak geliyor ama emin olmak için:
+const kart: Record<string, unknown> = {
+  _key: key,  // key parametresi number olarak tanımlı, bu OK
+};
 ```
 
-### 3. Session yenileme update sorgusunda kolon adı düzeltmesi (satır 88-91)
+## Ek Kontroller
 
-```typescript
-// Yanlış:
-.update({
-  dia_session_id: newSessionId,
-  dia_session_expiry: newExpiry.toISOString(),
-})
+Sadece `_key` integer dönüşümü yeterli olmalı. Çünkü:
+- `dia_raw_data._key` değeri `"2444764"` (string)
+- Bu değer faturanın kendi key'i
+- `kalemler` dizisi boş - yani kalem bilgisi sync edilmemiş ama bu sorun değil
 
-// Doğru:
-.update({
-  dia_session_id: newSessionId,
-  dia_session_expires: newExpiry.toISOString(),
-})
+## Değişiklik Özeti
+
+| Dosya | Satır | Değişiklik |
+|-------|-------|------------|
+| `supabase/functions/dia-approve/index.ts` | 249 | `_key` değerini `parseInt()` ile integer'a dönüştür |
+
+## Beklenen Sonuç
+
+Düzeltme sonrası DIA API'ye gönderilecek payload:
+```json
+{
+  "scf_fatura_guncelle": {
+    "session_id": "...",
+    "firma_kodu": 7,
+    "donem_kodu": 6,
+    "kart": {
+      "_key": 2444764,
+      "ustislemack": "MUHASEBELEŞEBİLİR",
+      "ekalan5": "Onaylandı"
+    }
+  }
+}
 ```
 
-## Düzeltme Sonrası Beklenen Davranış
-
-1. Session bilgileri doğru okunacak
-2. Session süresi dolmuşsa otomatik yenilenecek
-3. DIA API'sine gerçek `scf_fatura_guncelle` isteği gönderilecek
-4. Gerçek DIA yanıtı `approval_history.dia_response` alanına kaydedilecek
-
+Integer `_key` ile DIA güncellemesi başarılı olmalı.
