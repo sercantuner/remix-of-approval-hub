@@ -269,13 +269,15 @@ export default function Dashboard() {
     ));
   }, []);
 
-  // Initialize approval queue
+  // Initialize approval queue - must be called before any conditional returns
   const approvalQueue = useApprovalQueue({
     onOptimisticUpdate: handleOptimisticUpdate,
     onRollback: handleRollback,
     onSuccess: handleQueueSuccess,
     onPartialSuccess: handlePartialSuccess,
   });
+
+  // All useMemo hooks must come after useApprovalQueue to maintain consistent hook order
 
   const pendingTransactions = useMemo(
     () => transactions.filter((t) => t.status === "pending"),
