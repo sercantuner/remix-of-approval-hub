@@ -203,22 +203,29 @@ async function fetchDiaData(profile: any, method: string, endpoint: string, sess
   return result;
 }
 
+// Parent receipt data structure with üst işlem türü and _user
+interface ParentReceiptData {
+  ustIslemKey: number | null;
+  userId: number | null;
+}
+
 // Determine transaction status based on üst işlem türü
-// parentUstIslemMap is used for current_account and bank where üst işlem is on parent receipt
+// parentReceiptMap is used for current_account and bank where üst işlem is on parent receipt
 function determineStatus(
   record: any, 
   profile: any, 
-  parentUstIslemMap?: Map<number, number | null>
+  parentReceiptMap?: Map<number, ParentReceiptData>
 ): "pending" | "approved" | "rejected" {
   let ustIslemKey = record._key_sis_ust_islem_turu;
   
   // If no üst işlem key on record, try to get from parent receipt map
-  if (!ustIslemKey && parentUstIslemMap) {
+  if (!ustIslemKey && parentReceiptMap) {
     const parentKey = record._key_scf_carihesap_fisi || record._key_bcs_banka_fisi;
     if (parentKey) {
       // Convert to number consistently - parentKey could be string or number
       const parentKeyNum = typeof parentKey === "number" ? parentKey : parseInt(String(parentKey));
-      ustIslemKey = parentUstIslemMap.get(parentKeyNum);
+      const parentData = parentReceiptMap.get(parentKeyNum);
+      ustIslemKey = parentData?.ustIslemKey;
       console.log(`[dia-sync] Looking up parent ${parentKeyNum} in map, found üst işlem key: ${ustIslemKey}`);
     }
   }
@@ -241,12 +248,34 @@ function determineStatus(
   return "pending";
 }
 
-// Fetch parent receipts and build üst işlem türü map
-async function fetchParentUstIslemMap(
+// Get owner user ID from parent receipt for current_account and bank
+function getOwnerFromParent(
+  record: any,
+  parentReceiptMap?: Map<number, ParentReceiptData>
+): number | null {
+  if (!parentReceiptMap) {
+    return record._user || record._owner || null;
+  }
+  
+  const parentKey = record._key_scf_carihesap_fisi || record._key_bcs_banka_fisi;
+  if (parentKey) {
+    const parentKeyNum = typeof parentKey === "number" ? parentKey : parseInt(String(parentKey));
+    const parentData = parentReceiptMap.get(parentKeyNum);
+    if (parentData?.userId) {
+      console.log(`[dia-sync] Got _user ${parentData.userId} from parent ${parentKeyNum}`);
+      return parentData.userId;
+    }
+  }
+  
+  return record._user || record._owner || null;
+}
+
+// Fetch parent receipts and build maps for üst işlem türü and _user
+async function fetchParentReceiptMap(
   profile: any, 
   sessionId: string, 
   txType: "current_account" | "bank"
-): Promise<Map<number, number | null>> {
+): Promise<Map<number, ParentReceiptData>> {
   const mapping = PARENT_RECEIPT_MAPPINGS[txType];
   if (!mapping) {
     return new Map();
@@ -282,23 +311,30 @@ async function fetchParentUstIslemMap(
     const records = result.result || [];
     console.log(`[dia-sync] Parent ${txType}: Found ${records.length} receipts`);
     
-    // Build map: _key -> _key_sis_ust_islem_turu
+    // Build map: _key -> { ustIslemKey, userId }
     // IMPORTANT: Use consistent number keys for reliable lookup
-    const ustIslemMap = new Map<number, number | null>();
+    const parentMap = new Map<number, ParentReceiptData>();
     for (const record of records) {
       const key = record._key;
-      const ustIslemKey = record._key_sis_ust_islem_turu;
       if (key) {
         // Convert key to number for consistent lookup
         const keyNum = typeof key === "number" ? key : parseInt(String(key));
+        
+        // Get üst işlem key
+        const ustIslemKey = record._key_sis_ust_islem_turu;
         const ustKeyNum = ustIslemKey ? (typeof ustIslemKey === "number" ? ustIslemKey : parseInt(String(ustIslemKey))) : null;
-        ustIslemMap.set(keyNum, ustKeyNum);
-        console.log(`[dia-sync] Parent map entry: _key=${keyNum} (type: number), _key_sis_ust_islem_turu=${ustKeyNum}`);
+        
+        // Get _user (owner) key
+        const userKey = record._user;
+        const userKeyNum = userKey ? (typeof userKey === "number" ? userKey : parseInt(String(userKey))) : null;
+        
+        parentMap.set(keyNum, { ustIslemKey: ustKeyNum, userId: userKeyNum });
+        console.log(`[dia-sync] Parent map entry: _key=${keyNum}, _key_sis_ust_islem_turu=${ustKeyNum}, _user=${userKeyNum}`);
       }
     }
     
-    console.log(`[dia-sync] Built üst işlem map for ${txType} with ${ustIslemMap.size} entries`);
-    return ustIslemMap;
+    console.log(`[dia-sync] Built parent map for ${txType} with ${parentMap.size} entries`);
+    return parentMap;
   } catch (err) {
     console.error(`[dia-sync] Error fetching parent ${txType}:`, err);
     return new Map();
@@ -452,14 +488,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch parent receipt üst işlem maps for current_account and bank
-    // These are needed because üst işlem türü is stored on parent receipt, not on detail rows
-    console.log("[dia-sync] Fetching parent receipt üst işlem maps...");
-    const [currentAccountUstIslemMap, bankUstIslemMap] = await Promise.all([
-      fetchParentUstIslemMap(profile, currentSessionId, "current_account"),
-      fetchParentUstIslemMap(profile, currentSessionId, "bank")
+    // Fetch parent receipt maps for current_account and bank
+    // These are needed because üst işlem türü and _user are stored on parent receipt, not on detail rows
+    console.log("[dia-sync] Fetching parent receipt maps...");
+    const [currentAccountReceiptMap, bankReceiptMap] = await Promise.all([
+      fetchParentReceiptMap(profile, currentSessionId, "current_account"),
+      fetchParentReceiptMap(profile, currentSessionId, "bank")
     ]);
-    console.log(`[dia-sync] Parent maps - current_account: ${currentAccountUstIslemMap.size}, bank: ${bankUstIslemMap.size}`);
+    console.log(`[dia-sync] Parent maps - current_account: ${currentAccountReceiptMap.size}, bank: ${bankReceiptMap.size}`);
 
     // Process results and build transactions
     for (const { txType, mapping, records, success, error } of fetchResults) {
@@ -501,12 +537,12 @@ Deno.serve(async (req) => {
       
       syncResults[txType] = { count: filteredRecords.length, success: true };
 
-      // Get the appropriate üst işlem map for this transaction type
-      let parentUstIslemMap: Map<number, number | null> | undefined;
+      // Get the appropriate parent receipt map for this transaction type
+      let parentReceiptMap: Map<number, ParentReceiptData> | undefined;
       if (txType === "current_account") {
-        parentUstIslemMap = currentAccountUstIslemMap;
+        parentReceiptMap = currentAccountReceiptMap;
       } else if (txType === "bank") {
-        parentUstIslemMap = bankUstIslemMap;
+        parentReceiptMap = bankReceiptMap;
       }
 
       // Transform and prepare for upsert
@@ -574,9 +610,13 @@ Deno.serve(async (req) => {
 
         // Determine status based on üst işlem türü from DIA
         // For current_account and bank, use parent receipt map
-        const status = determineStatus(record, profile, parentUstIslemMap);
+        const status = determineStatus(record, profile, parentReceiptMap);
         const parentKey = record._key_scf_carihesap_fisi || record._key_bcs_banka_fisi;
-        console.log(`[dia-sync] Record ${diaKey} (parent: ${parentKey}) - _key_sis_ust_islem_turu: ${record._key_sis_ust_islem_turu} -> status: ${status}`);
+        
+        // Get owner (_user) from parent receipt for bank transactions
+        const ownerUserId = getOwnerFromParent(record, parentReceiptMap);
+        
+        console.log(`[dia-sync] Record ${diaKey} (parent: ${parentKey}) - üst işlem: ${record._key_sis_ust_islem_turu} -> status: ${status}, _owner: ${ownerUserId}`);
 
         transactionsToUpsert.push({
           user_id: userId,
