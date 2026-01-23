@@ -32,7 +32,7 @@ interface DiaUpdateResponse {
 async function getValidDiaSession(supabase: any, userId: string): Promise<DiaSession | null> {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("dia_sunucu_adi, dia_session_id, dia_firma_kodu, dia_donem_kodu, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_session_expiry")
+    .select("dia_sunucu_adi, dia_session_id, dia_firma_kodu, dia_donem_kodu, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_session_expires")
     .eq("id", userId)
     .maybeSingle();
 
@@ -43,7 +43,7 @@ async function getValidDiaSession(supabase: any, userId: string): Promise<DiaSes
 
   // Check if session is expired
   const now = new Date();
-  const expiry = profile.dia_session_expiry ? new Date(profile.dia_session_expiry) : null;
+  const expiry = profile.dia_session_expires ? new Date(profile.dia_session_expires) : null;
   
   if (expiry && expiry > now) {
     return {
@@ -88,7 +88,7 @@ async function getValidDiaSession(supabase: any, userId: string): Promise<DiaSes
         .from("profiles")
         .update({
           dia_session_id: newSessionId,
-          dia_session_expiry: newExpiry.toISOString(),
+          dia_session_expires: newExpiry.toISOString(),
         })
         .eq("id", userId);
 
