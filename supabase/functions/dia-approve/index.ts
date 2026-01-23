@@ -214,7 +214,7 @@ async function updateDiaInvoice(
 // Update current account receipt in DIA ERP using scf_carihesap_fisi_guncelle
 async function updateDiaCurrentAccount(
   session: DiaSession,
-  fisno: string,
+  parentKey: number,  // _key_scf_carihesap_fisi - the main receipt key
   action: "approve" | "reject" | "analyze",
   reason?: string,
   approveKey?: number | null,
@@ -224,9 +224,9 @@ async function updateDiaCurrentAccount(
   const apiUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
 
   // Build the kart object based on action
-  // For current account, we use fisno as key and aciklama3 for status text
+  // For current account, we use _key_scf_carihesap_fisi (numeric parent key) and aciklama3 for status text
   const kart: Record<string, unknown> = {
-    _key: { fisno }, // Use fisno as the key identifier
+    _key: parentKey, // Use the numeric parent key (not fisno)
   };
 
   if (action === "approve") {
@@ -387,7 +387,7 @@ async function updateDiaCurrentAccountWithRetry(
   userId: string,
   profile: ProfileWithUstIslemKeys,
   session: DiaSession,
-  fisno: string,
+  parentKey: number,  // _key_scf_carihesap_fisi
   action: "approve" | "reject" | "analyze",
   reason?: string
 ): Promise<DiaUpdateResponse> {
@@ -396,7 +396,7 @@ async function updateDiaCurrentAccountWithRetry(
   const analyzeKey = profile.dia_ust_islem_analyze_key;
   
   // First attempt
-  let response = await updateDiaCurrentAccount(session, fisno, action, reason, approveKey, rejectKey, analyzeKey);
+  let response = await updateDiaCurrentAccount(session, parentKey, action, reason, approveKey, rejectKey, analyzeKey);
   
   // If INVALID_SESSION, refresh and retry once
   if (!response.success && response.code === "401") {
@@ -404,7 +404,7 @@ async function updateDiaCurrentAccountWithRetry(
     const newSession = await forceRefreshDiaSession(supabase, userId, profile);
     
     if (newSession) {
-      response = await updateDiaCurrentAccount(newSession, fisno, action, reason, approveKey, rejectKey, analyzeKey);
+      response = await updateDiaCurrentAccount(newSession, parentKey, action, reason, approveKey, rejectKey, analyzeKey);
     }
   }
   
@@ -490,21 +490,21 @@ Deno.serve(async (req) => {
         if (!diaResponse.success) {
           console.error(`[dia-approve] DIA invoice update failed for transaction ${txId}:`, diaResponse.message);
         }
-      } else if (diaSession && profile && transaction.transaction_type === "current_account" && transaction.document_no) {
-        // Current account uses fisno (document_no) for updates
-        const fisno = transaction.document_no;
-        console.log(`[dia-approve] Updating DIA current account with fisno: ${fisno}`);
+      } else if (diaSession && profile && transaction.transaction_type === "current_account" && transaction.dia_raw_data?._key_scf_carihesap_fisi) {
+        // Current account uses _key_scf_carihesap_fisi (parent key) for updates
+        const parentKey = parseInt(transaction.dia_raw_data._key_scf_carihesap_fisi, 10);
+        console.log(`[dia-approve] Updating DIA current account with _key_scf_carihesap_fisi: ${parentKey}`);
         
         // Use retry wrapper for INVALID_SESSION handling
-        diaResponse = await updateDiaCurrentAccountWithRetry(supabase, userId, profile, diaSession, fisno, action, reason);
+        diaResponse = await updateDiaCurrentAccountWithRetry(supabase, userId, profile, diaSession, parentKey, action, reason);
         
         if (!diaResponse.success) {
           console.error(`[dia-approve] DIA current account update failed for transaction ${txId}:`, diaResponse.message);
         }
       } else if (transaction.transaction_type === "invoice" && !transaction.dia_raw_data?._key) {
         console.log(`[dia-approve] No _key found in dia_raw_data for invoice ${txId}`);
-      } else if (transaction.transaction_type === "current_account" && !transaction.document_no) {
-        console.log(`[dia-approve] No document_no found for current_account ${txId}`);
+      } else if (transaction.transaction_type === "current_account" && !transaction.dia_raw_data?._key_scf_carihesap_fisi) {
+        console.log(`[dia-approve] No _key_scf_carihesap_fisi found for current_account ${txId}`);
       } else {
         console.log(`[dia-approve] Skipping DIA update for transaction type: ${transaction.transaction_type}`);
       }
