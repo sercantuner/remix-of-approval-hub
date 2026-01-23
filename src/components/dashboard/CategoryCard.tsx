@@ -74,12 +74,6 @@ export function CategoryCard({
             <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
         </div>
-        <p className={cn(
-          'text-sm mt-0.5',
-          totalAmount >= 0 ? 'text-success' : 'text-destructive'
-        )}>
-          {formatCurrency(totalAmount)}
-        </p>
       </div>
     </button>
   );
