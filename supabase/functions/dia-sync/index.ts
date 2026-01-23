@@ -62,17 +62,7 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
     counterpartyField: "aciklama",
     codeField: null
   },
-  order: { 
-    method: "scf_siparis_listele",
-    endpoint: "scf/json",
-    keyField: "_key", 
-    docField: "siparisno", 
-    amountField: "net",  // net tutarı kullan
-    dateField: "tarih", 
-    counterpartyField: "unvan",  // unvan alanından al
-    codeField: "__carikodu",
-    approvalField: "onay_txt"
-  },
+  // order and check_note are disabled - not synced
 };
 
 // Parent receipt mappings - to fetch üst işlem türü from main receipts

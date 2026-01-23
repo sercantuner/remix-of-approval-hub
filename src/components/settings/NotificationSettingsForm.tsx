@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Clock, Mail, Plus, X, Loader2, FileText, ShoppingCart, Users, Building, Wallet, Receipt } from "lucide-react";
+import { Bell, Clock, Mail, Plus, X, Loader2, FileText, Users, Building, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,11 +30,9 @@ interface CategoryConfig {
 
 const CATEGORIES: CategoryConfig[] = [
   { key: "invoice_emails", label: "Faturalar", icon: FileText },
-  { key: "order_emails", label: "Siparişler", icon: ShoppingCart },
   { key: "current_account_emails", label: "Cari Hareketler", icon: Users },
   { key: "bank_emails", label: "Banka Hareketleri", icon: Building },
   { key: "cash_emails", label: "Kasa Hareketleri", icon: Wallet },
-  { key: "check_note_emails", label: "Çek/Senet", icon: Receipt },
 ];
 
 const HOURS = Array.from({ length: 24 }, (_, i) => ({
