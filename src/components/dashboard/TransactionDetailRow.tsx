@@ -198,12 +198,12 @@ function flattenLineItem(item: Record<string, unknown>, transactionType: string,
   
   // Normalize field names - use foreign currency fields (dvz suffix) when currency is not TRY
   if (useForeignCurrency) {
-    // For foreign currency: prioritize dvz fields
-    flat.birimfiyat = item.birimfiyatidvz || item.sonbirimfiyatidvz || item.birimfiyatdvz || item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
-    flat.tutar = item.tutaridvz || item.tutardvz || item.tutari || item.tutar || 0;
-    flat.iskonto = item.indirimtutaridvz || item.indirimdvz || item.indirimtutari || item.indirimtoplam || item.iskonto || 0;
-    flat.kdv = item.kdvtutaridvz || item.kdvdvz || item.kdvtutari || item.kdvtutar || item.kdv || 0;
-    flat.net = item.netdvz || item.net || (Number(flat.tutar || 0) - Number(flat.iskonto || 0) + Number(flat.kdv || 0));
+    // For foreign currency: prioritize dvz fields (check all possible naming conventions)
+    flat.birimfiyat = item.birimfiyatdvz || item.birimfiyatidvz || item.sonbirimfiyatidvz || item.sonbirimfiyatdvz || item.dvzbirimfiyat || item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
+    flat.tutar = item.tutardvz || item.tutaridvz || item.dvztutar || item.tutari || item.tutar || 0;
+    flat.iskonto = item.indirimtutardvz || item.indirimtutaridvz || item.indirimtoplamdvz || item.indirimdvz || item.dvzindirim || item.indirimtutari || item.indirimtoplam || item.iskonto || 0;
+    flat.kdv = item.kdvtutardvz || item.kdvtutaridvz || item.kdvdvz || item.dvzkdv || item.kdvtutari || item.kdvtutar || item.kdv || 0;
+    flat.net = item.netdvz || item.dvznet || item.net || (Number(flat.tutar || 0) - Number(flat.iskonto || 0) + Number(flat.kdv || 0));
   } else {
     // For TRY: use standard fields
     flat.birimfiyat = item.birimfiyati || item.sonbirimfiyati || item.birimfiyat || 0;
@@ -347,6 +347,11 @@ export function TransactionDetailRow({
             result = Array.isArray(data.result) ? data.result[0] : data.result;
           } else if (data?.msg) {
             result = Array.isArray(data.msg) ? data.msg[0] : data.msg;
+          }
+          // Log line items for debugging currency fields
+          if (result?.m_kalemler && Array.isArray(result.m_kalemler) && result.m_kalemler.length > 0) {
+            console.log('[TransactionDetailRow] First line item fields:', Object.keys(result.m_kalemler[0]));
+            console.log('[TransactionDetailRow] First line item data:', result.m_kalemler[0]);
           }
           setDetailData(result);
         })
