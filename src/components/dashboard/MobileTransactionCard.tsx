@@ -139,26 +139,26 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
         </div>
 
         {/* Document info */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Belge No</span>
-            <span className="font-mono text-sm font-medium">{transaction.documentNo}</span>
+        <div className="space-y-3">
+          <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+            <span className="text-xs text-muted-foreground">Belge No</span>
+            <span className="font-mono text-sm font-medium text-right">{transaction.documentNo}</span>
           </div>
           
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Cari/Açıklama</span>
-            <span className="text-sm font-medium truncate max-w-[180px]">{transaction.counterparty}</span>
+          <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
+            <span className="text-xs text-muted-foreground">Cari/Açıklama</span>
+            <span className="text-sm font-medium text-right break-words">{transaction.counterparty || '-'}</span>
           </div>
           
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Tarih</span>
-            <span className="text-sm">{formatDate(transaction.date)}</span>
+          <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
+            <span className="text-xs text-muted-foreground">Tarih</span>
+            <span className="text-sm text-right">{formatDate(transaction.date)}</span>
           </div>
           
-          <div className="flex items-center justify-between pt-2 border-t">
-            <span className="text-sm text-muted-foreground">Tutar</span>
+          <div className="grid grid-cols-[100px_1fr] gap-2 items-center pt-3 border-t">
+            <span className="text-xs text-muted-foreground">Tutar</span>
             <span className={cn(
-              "font-semibold text-base",
+              "font-semibold text-base text-right",
               transaction.amount >= 0 ? "text-success" : "text-destructive"
             )}>
               {formatCurrency(transaction.amount, transaction.currency)}
