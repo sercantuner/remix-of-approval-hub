@@ -258,17 +258,16 @@ Deno.serve(async (req) => {
     // Handle list_users action - fetch all users for name resolution
     if (request.action === "list_users") {
       const diaUserUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
+      // Kullanıcı listesi için _level1 filtresi kullanma - kullanıcılar firma üstü tanımlanır
       const userPayload = {
         sis_kullanici_listele: {
           session_id: session.session_id,
           firma_kodu: session.firma_kodu,
           donem_kodu: session.donem_kodu,
-          filters: [
-            { field: "_level1", operator: "", value: String(session.firma_kodu) }
-          ],
+          filters: [],
           sorts: "",
           params: "",
-          limit: 0,
+          limit: 500,
           offset: 0,
         },
       };
@@ -282,6 +281,19 @@ Deno.serve(async (req) => {
       });
 
       const userResult = await userResponse.json();
+      
+      // Debug: Log full response structure
+      console.log(`[dia-api] User list response code: ${userResult.code}, msg: ${userResult.msg}`);
+      
+      // Debug: Log first few users
+      const userList = userResult.result || [];
+      console.log(`[dia-api] User list count: ${userList.length}`);
+      if (userList.length > 0) {
+        console.log(`[dia-api] First user sample:`, JSON.stringify(userList[0]).substring(0, 500));
+      } else {
+        // Log full response if empty
+        console.log(`[dia-api] Full user response:`, JSON.stringify(userResult).substring(0, 1000));
+      }
       
       return new Response(JSON.stringify(userResult), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
