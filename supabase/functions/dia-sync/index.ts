@@ -75,7 +75,7 @@ const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
 async function getValidSession(supabase: any, userId: string) {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("dia_sunucu_adi, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_session_id, dia_session_expires, dia_firma_kodu, dia_donem_kodu")
+    .select("dia_sunucu_adi, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_session_id, dia_session_expires, dia_firma_kodu, dia_donem_kodu, dia_ust_islem_analyze_key")
     .eq("id", userId)
     .maybeSingle();
 
@@ -131,14 +131,20 @@ async function getValidSession(supabase: any, userId: string) {
   return profile;
 }
 
-async function fetchDiaData(profile: any, method: string, endpoint: string, sessionId: string) {
+async function fetchDiaData(profile: any, method: string, endpoint: string, sessionId: string, analyzeKey?: number) {
   // Using correct DIA API v3 URL structure
   const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/${endpoint}`;
 
   // Add _level1 filter with firma_kodu for multi-company filtering
-  const filters = [
+  const filters: Array<{field: string, operator: string, value: string}> = [
     { field: "_level1", operator: "", value: String(profile.dia_firma_kodu) }
   ];
+
+  // If analyzeKey is provided, filter by üst işlem türü
+  if (analyzeKey) {
+    filters.push({ field: "_key_sis_ust_islem_turu", operator: "=", value: String(analyzeKey) });
+    console.log(`[dia-sync] Filtering by _key_sis_ust_islem_turu = ${analyzeKey}`);
+  }
 
   const payload = {
     [method]: {
@@ -257,12 +263,16 @@ Deno.serve(async (req) => {
     // First attempt with current session
     let currentSessionId = profile.dia_session_id;
     
+    // Get analyze key for filtering
+    const analyzeKey = profile.dia_ust_islem_analyze_key;
+    console.log(`[dia-sync] Analyze key: ${analyzeKey || 'not set - fetching all'}`);
+
     // Fetch data for each transaction type IN PARALLEL for speed
     console.log("[dia-sync] Starting parallel fetch for all transaction types");
     let fetchPromises = Object.entries(MODULE_MAPPINGS).map(async ([txType, mapping]) => {
       try {
         console.log(`[dia-sync] Fetching ${txType} using ${mapping.method}`);
-        const result = await fetchDiaData(profile, mapping.method, mapping.endpoint, currentSessionId);
+        const result = await fetchDiaData(profile, mapping.method, mapping.endpoint, currentSessionId, analyzeKey);
         
         // Check for invalid session
         if (result.code === "401" && result.msg === "INVALID_SESSION") {
@@ -295,7 +305,7 @@ Deno.serve(async (req) => {
         fetchPromises = Object.entries(MODULE_MAPPINGS).map(async ([txType, mapping]) => {
           try {
             console.log(`[dia-sync] Retrying ${txType} using ${mapping.method}`);
-            const result = await fetchDiaData(profile, mapping.method, mapping.endpoint, currentSessionId);
+            const result = await fetchDiaData(profile, mapping.method, mapping.endpoint, currentSessionId, analyzeKey);
             const records = result.result || [];
             console.log(`[dia-sync] ${txType}: Found ${records.length} records`);
             return { txType, mapping, records, success: true, needsRetry: false };

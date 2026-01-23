@@ -18,6 +18,7 @@ interface DiaConnectionFormProps {
     donemKodu?: number;
     ustIslemApproveKey?: number;
     ustIslemRejectKey?: number;
+    ustIslemAnalyzeKey?: number;
   };
 }
 
@@ -36,6 +37,7 @@ export function DiaConnectionForm({ onSuccess, existingConnection }: DiaConnecti
   const [ustIslemTurleri, setUstIslemTurleri] = useState<UstIslemTuru[]>([]);
   const [approveKey, setApproveKey] = useState<string>(existingConnection?.ustIslemApproveKey?.toString() || "");
   const [rejectKey, setRejectKey] = useState<string>(existingConnection?.ustIslemRejectKey?.toString() || "");
+  const [analyzeKey, setAnalyzeKey] = useState<string>(existingConnection?.ustIslemAnalyzeKey?.toString() || "");
   const [isLoadingUstIslem, setIsLoadingUstIslem] = useState(false);
   const [isSavingUstIslem, setIsSavingUstIslem] = useState(false);
 
@@ -64,10 +66,10 @@ export function DiaConnectionForm({ onSuccess, existingConnection }: DiaConnecti
   };
 
   const handleSaveUstIslemSettings = async () => {
-    if (!approveKey || !rejectKey) {
+    if (!approveKey || !rejectKey || !analyzeKey) {
       toast({
         title: "Eksik Bilgi",
-        description: "Lütfen hem onay hem de red için üst işlem türü seçin.",
+        description: "Lütfen onay, red ve analiz için üst işlem türü seçin.",
         variant: "destructive",
       });
       return;
@@ -83,6 +85,7 @@ export function DiaConnectionForm({ onSuccess, existingConnection }: DiaConnecti
         .update({
           dia_ust_islem_approve_key: parseInt(approveKey),
           dia_ust_islem_reject_key: parseInt(rejectKey),
+          dia_ust_islem_analyze_key: parseInt(analyzeKey),
         })
         .eq("id", user.id);
 
@@ -356,10 +359,29 @@ export function DiaConnectionForm({ onSuccess, existingConnection }: DiaConnecti
                     </p>
                   </div>
 
+                  <div className="space-y-2">
+                    <Label htmlFor="analyzeKey">Analiz Üst İşlem Türü</Label>
+                    <Select value={analyzeKey} onValueChange={setAnalyzeKey}>
+                      <SelectTrigger id="analyzeKey" className="bg-background">
+                        <SelectValue placeholder="Üst işlem türü seçin" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover z-50">
+                        {ustIslemTurleri.map((tur) => (
+                          <SelectItem key={tur._key} value={tur._key.toString()}>
+                            {tur.aciklama}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Dashboard'da sadece bu üst işlem türündeki belgeler listelenir
+                    </p>
+                  </div>
+
                   <Button
                     type="button"
                     onClick={handleSaveUstIslemSettings}
-                    disabled={isSavingUstIslem || !approveKey || !rejectKey}
+                    disabled={isSavingUstIslem || !approveKey || !rejectKey || !analyzeKey}
                     className="w-full"
                     variant="secondary"
                   >
