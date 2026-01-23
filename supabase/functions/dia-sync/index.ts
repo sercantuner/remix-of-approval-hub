@@ -346,11 +346,19 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // Filter out current_account records with turu = 'AF'
+      // Filter out current_account records with turu = 'AF' (açılış fişleri)
       let filteredRecords = records;
       if (txType === "current_account") {
-        filteredRecords = records.filter((r: any) => r.turu !== "AF");
-        console.log(`[dia-sync] current_account: Filtered ${records.length - filteredRecords.length} AF records, ${filteredRecords.length} remaining`);
+        const beforeCount = records.length;
+        filteredRecords = records.filter((r: any) => {
+          const turu = r.turu || "";
+          const isAF = turu === "AF" || turu.toUpperCase() === "AF";
+          if (isAF) {
+            console.log(`[dia-sync] Filtering out AF record: ${r.fisno}, turu: ${turu}`);
+          }
+          return !isAF;
+        });
+        console.log(`[dia-sync] current_account: Filtered ${beforeCount - filteredRecords.length} AF records, ${filteredRecords.length} remaining`);
       }
       
       syncResults[txType] = { count: filteredRecords.length, success: true };
