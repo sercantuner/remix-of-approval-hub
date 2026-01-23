@@ -53,25 +53,25 @@ const SYNC_STEPS = [
   { id: "save", label: "Veriler kaydediliyor..." },
 ];
 
-// Process current_account transactions - show all as separate rows but mark linked ones
+// Process grouped transactions (current_account and bank) - show all as separate rows but mark linked ones
 // All items with same groupKey belong to same receipt, single action affects all
-function processCurrentAccountTransactions(transactions: Transaction[]): Transaction[] {
+function processGroupedTransactions(transactions: Transaction[]): Transaction[] {
   const result: Transaction[] = [];
-  const currentAccountMap = new Map<string, Transaction[]>();
+  const groupedMap = new Map<string, Transaction[]>();
 
-  // Group by _key_scf_carihesap_fisi
+  // Group by groupKey for current_account and bank types
   for (const t of transactions) {
-    if (t.type === "current_account" && t.groupKey) {
-      const existing = currentAccountMap.get(t.groupKey) || [];
+    if ((t.type === "current_account" || t.type === "bank") && t.groupKey) {
+      const existing = groupedMap.get(t.groupKey) || [];
       existing.push(t);
-      currentAccountMap.set(t.groupKey, existing);
+      groupedMap.set(t.groupKey, existing);
     } else {
       result.push(t);
     }
   }
 
   // Process grouped items - show all as separate rows but mark as linked
-  for (const [groupKey, items] of currentAccountMap.entries()) {
+  for (const [groupKey, items] of groupedMap.entries()) {
     if (items.length === 1) {
       // Single item - no linking needed
       result.push(items[0]);
@@ -231,10 +231,13 @@ export default function Dashboard() {
         const type = t.transaction_type as TransactionType;
         const status = (t.status as Transaction["status"]) || "pending";
 
-        // Extract group key for current_account transactions
-        const groupKey = type === "current_account" && rawData?._key_scf_carihesap_fisi
-          ? String(rawData._key_scf_carihesap_fisi)
-          : undefined;
+        // Extract group key for current_account and bank transactions
+        let groupKey: string | undefined = undefined;
+        if (type === "current_account" && rawData?._key_scf_carihesap_fisi) {
+          groupKey = String(rawData._key_scf_carihesap_fisi);
+        } else if (type === "bank" && rawData?._key_bcs_banka_fisi) {
+          groupKey = String(rawData._key_bcs_banka_fisi);
+        }
 
         return {
           id: t.id,
@@ -254,8 +257,8 @@ export default function Dashboard() {
         };
       });
 
-      // Process current_account transactions - show as separate rows with linking
-      const processedTransactions = processCurrentAccountTransactions(mapped);
+      // Process current_account and bank transactions - show as separate rows with linking
+      const processedTransactions = processGroupedTransactions(mapped);
 
       setTransactions(processedTransactions);
     }
