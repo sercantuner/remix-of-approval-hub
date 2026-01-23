@@ -1,6 +1,11 @@
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
 
+interface CurrencyTotal {
+  currency: string;
+  amount: number;
+}
+
 interface StatCardProps {
   title: string;
   value: string | number;
@@ -12,6 +17,26 @@ interface StatCardProps {
   };
   variant?: 'default' | 'primary' | 'accent';
   onClick?: () => void;
+  currencyTotals?: CurrencyTotal[];
+}
+
+// Format currency with proper symbol
+function formatCurrency(amount: number, currency: string): string {
+  const symbols: Record<string, string> = {
+    TRY: '₺',
+    TL: '₺',
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+  };
+  
+  const symbol = symbols[currency] || currency + ' ';
+  const formattedAmount = new Intl.NumberFormat('tr-TR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(amount));
+  
+  return `${symbol}${formattedAmount}`;
 }
 
 export function StatCard({
@@ -22,6 +47,7 @@ export function StatCard({
   trend,
   variant = 'default',
   onClick,
+  currencyTotals,
 }: StatCardProps) {
   const variants = {
     default: 'bg-card',
@@ -54,6 +80,19 @@ export function StatCard({
             )}>
               {subtitle}
             </p>
+          )}
+          {/* Currency totals */}
+          {currencyTotals && currencyTotals.length > 0 && (
+            <div className={cn(
+              'mt-2 space-y-0.5',
+              variant === 'default' ? 'text-muted-foreground' : 'opacity-80'
+            )}>
+              {currencyTotals.map(({ currency, amount }) => (
+                <p key={currency} className="text-xs font-medium">
+                  {formatCurrency(amount, currency)}
+                </p>
+              ))}
+            </div>
           )}
           {trend && (
             <div className={cn(

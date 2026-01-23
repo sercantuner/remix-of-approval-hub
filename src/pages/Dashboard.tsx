@@ -331,15 +331,49 @@ export default function Dashboard() {
     return filtered;
   }, [transactions, statusFilter, activeCategory, searchQuery]);
 
+  // Helper to calculate currency totals
+  const calculateCurrencyTotals = useCallback((transactionList: Transaction[]) => {
+    const currencyMap = new Map<string, number>();
+    
+    for (const t of transactionList) {
+      const currency = t.currency || 'TRY';
+      const current = currencyMap.get(currency) || 0;
+      currencyMap.set(currency, current + t.amount);
+    }
+    
+    // Sort: TRY first, then alphabetically
+    return Array.from(currencyMap.entries())
+      .sort(([a], [b]) => {
+        if (a === 'TRY') return -1;
+        if (b === 'TRY') return 1;
+        return a.localeCompare(b);
+      })
+      .map(([currency, amount]) => ({ currency, amount }));
+  }, []);
+
   const stats = useMemo(() => {
-    const approved = transactions.filter((t) => t.status === "approved").length;
-    const rejected = transactions.filter((t) => t.status === "rejected").length;
-    const analyzing = transactions.filter((t) => t.status === "analyzing").length;
+    const approvedTx = transactions.filter((t) => t.status === "approved");
+    const rejectedTx = transactions.filter((t) => t.status === "rejected");
+    const analyzingTx = transactions.filter((t) => t.status === "analyzing");
+    
+    const approved = approvedTx.length;
+    const rejected = rejectedTx.length;
+    const analyzing = analyzingTx.length;
     const pending = pendingTransactions.length;
     const total = transactions.length;
 
-    return { approved, rejected, analyzing, pending, total };
-  }, [transactions, pendingTransactions]);
+    // Calculate currency totals for each status
+    const pendingTotals = calculateCurrencyTotals(pendingTransactions);
+    const analyzingTotals = calculateCurrencyTotals(analyzingTx);
+    const approvedTotals = calculateCurrencyTotals(approvedTx);
+    const rejectedTotals = calculateCurrencyTotals(rejectedTx);
+    const allTotals = calculateCurrencyTotals(transactions);
+
+    return { 
+      approved, rejected, analyzing, pending, total,
+      pendingTotals, analyzingTotals, approvedTotals, rejectedTotals, allTotals
+    };
+  }, [transactions, pendingTransactions, calculateCurrencyTotals]);
 
   // Optimistic approve - no waiting
   const handleApprove = (ids: string[]) => {
@@ -629,6 +663,7 @@ export default function Dashboard() {
               icon={Clock} 
               variant={statusFilter === null ? "primary" : "default"}
               onClick={() => setStatusFilter(null)}
+              currencyTotals={stats.pendingTotals}
             />
             <StatCard 
               title="İnceleniyor" 
@@ -636,14 +671,15 @@ export default function Dashboard() {
               icon={Eye}
               variant={statusFilter === "analyzing" ? "primary" : "default"}
               onClick={() => setStatusFilter(statusFilter === "analyzing" ? null : "analyzing")}
+              currencyTotals={stats.analyzingTotals}
             />
             <StatCard
               title="Onaylanan"
               value={stats.approved}
               icon={CheckCircle}
-              trend={{ value: 12, isPositive: true }}
               variant={statusFilter === "approved" ? "primary" : "default"}
               onClick={() => setStatusFilter(statusFilter === "approved" ? null : "approved")}
+              currencyTotals={stats.approvedTotals}
             />
             <StatCard 
               title="Reddedilen" 
@@ -651,8 +687,14 @@ export default function Dashboard() {
               icon={XCircle}
               variant={statusFilter === "rejected" ? "primary" : "default"}
               onClick={() => setStatusFilter(statusFilter === "rejected" ? null : "rejected")}
+              currencyTotals={stats.rejectedTotals}
             />
-            <StatCard title="Toplam İşlem" value={stats.total} icon={ClipboardCheck} />
+            <StatCard 
+              title="Toplam İşlem" 
+              value={stats.total} 
+              icon={ClipboardCheck}
+              currencyTotals={stats.allTotals}
+            />
           </div>
 
           {/* Category Cards */}
