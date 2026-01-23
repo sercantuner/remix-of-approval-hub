@@ -206,6 +206,14 @@ export function TransactionTable({
       if (transaction.status === 'rejected') {
         return cn(base, 'bg-destructive/10');
       }
+      if (transaction.status === 'analyzing') {
+        return cn(base, 'bg-primary/10');
+      }
+    }
+    
+    // Analyzing status background (even without queue status)
+    if (transaction.status === 'analyzing' && !transaction._processing) {
+      return cn(base, 'bg-primary/5 border-l-2 border-l-primary');
     }
     
     if (isSelected) return cn(base, 'bg-primary/10');
