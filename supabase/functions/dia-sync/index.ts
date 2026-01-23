@@ -82,14 +82,27 @@ async function getValidSession(supabase: any, userId: string) {
     .eq("id", userId)
     .maybeSingle();
 
-  if (error || !profile || !profile.dia_session_id) {
+  if (error || !profile) {
+    console.log("[dia-sync] No profile found for user");
     return null;
   }
 
-  const expiresAt = new Date(profile.dia_session_expires);
-  if (expiresAt.getTime() - 2 * 60 * 1000 < Date.now()) {
-    // Auto refresh session - Using correct DIA API v3 URL and format
-    const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
+  // Check if DIA connection is configured
+  if (!profile.dia_sunucu_adi || !profile.dia_ws_kullanici || !profile.dia_ws_sifre || !profile.dia_api_key) {
+    console.log("[dia-sync] DIA connection not configured");
+    return null;
+  }
+
+  const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
+  
+  // Check if session exists and is valid
+  const hasSession = profile.dia_session_id && profile.dia_session_expires;
+  const sessionExpired = hasSession && new Date(profile.dia_session_expires).getTime() - 2 * 60 * 1000 < Date.now();
+  
+  // If no session or session expired, create/refresh it
+  if (!hasSession || sessionExpired) {
+    console.log(`[dia-sync] ${!hasSession ? 'No session' : 'Session expired'}, creating new session...`);
+    
     try {
       const loginResponse = await fetch(diaBaseUrl, {
         method: "POST",
@@ -110,27 +123,34 @@ async function getValidSession(supabase: any, userId: string) {
       });
 
       const loginResult = await loginResponse.json();
+      console.log("[dia-sync] Login result:", JSON.stringify(loginResult));
+      
       // DIA returns: { code: "200", msg: "session_id", warnings: [] }
       if (loginResult.code === "200" && loginResult.msg) {
         await supabase
           .from("profiles")
           .update({
             dia_session_id: loginResult.msg,
-            dia_session_expires: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+            dia_session_expires: new Date(Date.now() + 55 * 60 * 1000).toISOString(),
           })
           .eq("id", userId);
 
+        console.log("[dia-sync] New session created:", loginResult.msg);
         return {
           ...profile,
           dia_session_id: loginResult.msg,
         };
+      } else {
+        console.error("[dia-sync] Login failed:", loginResult);
+        return null;
       }
     } catch (e) {
       console.error("[dia-sync] Auto-login failed:", e);
+      return null;
     }
-    return null;
   }
 
+  console.log("[dia-sync] Using existing valid session");
   return profile;
 }
 
