@@ -125,12 +125,13 @@ export function MobileHeader({
                       onCategoryChange?.(null);
                     }}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
-                      "hover:bg-muted text-foreground/80 hover:text-foreground",
+                      "w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200",
+                      "hover:bg-muted text-foreground/80 hover:text-foreground hover:translate-x-1",
+                      "active:scale-[0.98]",
                       activeSection === "dashboard" && !activeCategory && "bg-primary/10 text-primary font-medium"
                     )}
                   >
-                    <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
+                    <LayoutDashboard className="w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
                     <span className="text-sm">Tüm İşlemler</span>
                   </button>
                 </div>
@@ -140,24 +141,38 @@ export function MobileHeader({
                   <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     İşlem Kategorileri
                   </p>
-                  {menuItems.filter(item => item.category).map((item) => {
+                  {menuItems.filter(item => item.category).map((item, index) => {
                     const count = getCategoryCount(item.category!);
+                    const isActive = activeCategory === item.category;
                     return (
                       <button
                         key={item.id}
                         onClick={() => handleCategoryClick(item.category!)}
+                        style={{ animationDelay: `${index * 50}ms` }}
                         className={cn(
-                          "w-full flex items-center justify-between px-3 py-3 rounded-lg transition-colors",
+                          "w-full flex items-center justify-between px-3 py-3 rounded-lg",
+                          "transition-all duration-200 ease-out",
                           "hover:bg-muted text-foreground/80 hover:text-foreground",
-                          activeCategory === item.category && "bg-primary/10 text-primary font-medium"
+                          "hover:translate-x-1 active:scale-[0.98]",
+                          "animate-fade-in",
+                          isActive && "bg-primary/10 text-primary font-medium translate-x-1"
                         )}
                       >
                         <div className="flex items-center gap-3">
-                          <item.icon className="w-5 h-5 flex-shrink-0" />
+                          <item.icon className={cn(
+                            "w-5 h-5 flex-shrink-0 transition-all duration-200",
+                            isActive && "scale-110"
+                          )} />
                           <span className="text-sm">{item.label}</span>
                         </div>
                         {count > 0 && (
-                          <Badge variant="secondary" className="ml-2">
+                          <Badge 
+                            variant={isActive ? "default" : "secondary"} 
+                            className={cn(
+                              "ml-2 transition-all duration-200",
+                              isActive && "bg-primary text-primary-foreground scale-105"
+                            )}
+                          >
                             {count}
                           </Badge>
                         )}
