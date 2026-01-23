@@ -3,8 +3,9 @@ import { Menu, X, Settings, LogOut, RefreshCw } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { TransactionType } from "@/types/transaction";
+import type { TransactionType, TransactionGroup } from "@/types/transaction";
 import {
   LayoutDashboard,
   FileText,
@@ -20,6 +21,9 @@ interface MobileHeaderProps {
   onLogout?: () => void;
   onSync?: () => void;
   isSyncing?: boolean;
+  groups?: TransactionGroup[];
+  activeCategory?: TransactionType | null;
+  onCategoryChange?: (category: TransactionType | null) => void;
 }
 
 interface MenuItem {
@@ -43,7 +47,10 @@ export function MobileHeader({
   user, 
   onLogout,
   onSync,
-  isSyncing 
+  isSyncing,
+  groups = [],
+  activeCategory,
+  onCategoryChange,
 }: MobileHeaderProps) {
   const [open, setOpen] = useState(false);
 
@@ -52,8 +59,19 @@ export function MobileHeader({
     setOpen(false);
   };
 
+  const handleCategoryClick = (category: TransactionType) => {
+    onCategoryChange?.(category);
+    setOpen(false);
+  };
+
+  // Get count for each category
+  const getCategoryCount = (category: TransactionType) => {
+    const group = groups.find(g => g.type === category);
+    return group?.count || 0;
+  };
+
   return (
-    <header className="sticky top-0 z-50 bg-background border-b px-4 py-3 flex items-center justify-between md:hidden">
+    <header className="sticky top-0 z-50 bg-background border-b px-4 py-3 flex items-center justify-between">
       <Logo size="sm" showText className="text-primary" />
       
       <div className="flex items-center gap-2">
@@ -74,7 +92,7 @@ export function MobileHeader({
               <Menu className="w-5 h-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-72 p-0">
+          <SheetContent side="right" className="w-80 p-0">
             <div className="flex flex-col h-full">
               {/* Header */}
               <div className="p-4 border-b flex items-center justify-between">
@@ -84,26 +102,73 @@ export function MobileHeader({
                 </Button>
               </div>
               
+              {/* User Info */}
+              {user && (
+                <div className="px-4 py-3 bg-muted/30 border-b">
+                  <p className="text-sm font-medium truncate">
+                    {user.full_name || user.email}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                </div>
+              )}
+              
               {/* Navigation */}
-              <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                {menuItems.map((item) => (
+              <nav className="flex-1 overflow-y-auto">
+                {/* Main Navigation */}
+                <div className="p-3 space-y-1">
+                  <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Navigasyon
+                  </p>
                   <button
-                    key={item.id}
-                    onClick={() => handleNavigation(item.id)}
+                    onClick={() => {
+                      handleNavigation("dashboard");
+                      onCategoryChange?.(null);
+                    }}
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
                       "hover:bg-muted text-foreground/80 hover:text-foreground",
-                      activeSection === item.id && "bg-muted text-foreground font-medium"
+                      activeSection === "dashboard" && !activeCategory && "bg-primary/10 text-primary font-medium"
                     )}
                   >
-                    <item.icon className="w-5 h-5 flex-shrink-0" />
-                    <span className="text-sm">{item.label}</span>
+                    <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
+                    <span className="text-sm">Tüm İşlemler</span>
                   </button>
-                ))}
+                </div>
+                
+                {/* Transaction Categories */}
+                <div className="p-3 pt-0 space-y-1">
+                  <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    İşlem Kategorileri
+                  </p>
+                  {menuItems.filter(item => item.category).map((item) => {
+                    const count = getCategoryCount(item.category!);
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => handleCategoryClick(item.category!)}
+                        className={cn(
+                          "w-full flex items-center justify-between px-3 py-3 rounded-lg transition-colors",
+                          "hover:bg-muted text-foreground/80 hover:text-foreground",
+                          activeCategory === item.category && "bg-primary/10 text-primary font-medium"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon className="w-5 h-5 flex-shrink-0" />
+                          <span className="text-sm">{item.label}</span>
+                        </div>
+                        {count > 0 && (
+                          <Badge variant="secondary" className="ml-2">
+                            {count}
+                          </Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </nav>
               
               {/* Footer */}
-              <div className="p-3 border-t space-y-2">
+              <div className="p-3 border-t space-y-1">
                 <button
                   onClick={() => handleNavigation("settings")}
                   className={cn(
@@ -115,15 +180,6 @@ export function MobileHeader({
                   <Settings className="w-5 h-5 flex-shrink-0" />
                   <span className="text-sm">Ayarlar</span>
                 </button>
-                
-                {user && (
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-sm font-medium truncate">
-                      {user.full_name || user.email}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                  </div>
-                )}
                 
                 {onLogout && (
                   <button

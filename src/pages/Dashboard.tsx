@@ -715,6 +715,9 @@ export default function Dashboard() {
           onLogout={handleLogout}
           onSync={handleSync}
           isSyncing={isSyncing}
+          groups={groups}
+          activeCategory={activeCategory}
+          onCategoryChange={setActiveCategory}
         />
       )}
 
@@ -794,8 +797,8 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Category Cards - Hidden on mobile when there's an active category */}
-          {(!isMobile || !activeCategory) && (
+          {/* Category Cards - Desktop only */}
+          {!isMobile && (
             <div>
               <div className="flex items-center justify-between mb-3 md:mb-4">
                 <h2 className="text-base md:text-lg font-semibold">İşlem Kategorileri</h2>
@@ -833,6 +836,23 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Mobile: Active category indicator */}
+          {isMobile && activeCategory && (
+            <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+              <span className="text-sm font-medium text-primary">
+                {groups.find(g => g.type === activeCategory)?.label || 'Seçili Kategori'}
+              </span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 px-2 text-xs"
+                onClick={() => setActiveCategory(null)}
+              >
+                Tümünü Göster
+              </Button>
             </div>
           )}
 
