@@ -271,15 +271,40 @@ export default function Dashboard() {
 
   const handleApprove = async (ids: string[]) => {
     try {
-      await diaApprove(ids, "approve");
+      const result = await diaApprove(ids, "approve");
       // Reload transactions from database to ensure consistency
       await loadTransactions();
       setSelectedIds([]);
       setSelectedTransaction(null);
-      toast({
-        title: "İşlemler Onaylandı",
-        description: `${ids.length} işlem başarıyla onaylandı.`,
-      });
+      
+      // DIA sonuçlarını işle
+      const diaUpdated = result?.diaUpdated || 0;
+      const results = result?.results || [];
+      const failedDia = results.filter((r: any) => r.success && !r.diaUpdated);
+      
+      if (diaUpdated === ids.length && diaUpdated > 0) {
+        toast({
+          title: "✓ DIA'da Güncellendi",
+          description: `${ids.length} işlem DIA'da başarıyla onaylandı.`,
+        });
+      } else if (diaUpdated > 0) {
+        toast({
+          title: "Kısmi DIA Güncellemesi",
+          description: `${diaUpdated}/${ids.length} işlem DIA'da güncellendi. ${failedDia.length} işlem yerel kaydedildi.`,
+        });
+      } else if (failedDia.length > 0) {
+        const firstError = failedDia[0]?.diaError || "DIA bağlantı hatası";
+        toast({
+          title: "⚠ Yerel Olarak Kaydedildi",
+          description: `${ids.length} işlem onaylandı ancak DIA güncellenemedi: ${firstError}`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "İşlemler Onaylandı",
+          description: `${ids.length} işlem başarıyla onaylandı.`,
+        });
+      }
     } catch (error) {
       toast({
         title: "Hata",
@@ -298,16 +323,43 @@ export default function Dashboard() {
   const handleRejectConfirm = async (reason: string) => {
     const ids = rejectDialogState.transactionIds;
     try {
-      await diaApprove(ids, "reject", reason);
+      const result = await diaApprove(ids, "reject", reason);
       // Reload transactions from database to ensure consistency
       await loadTransactions();
       setSelectedIds([]);
       setSelectedTransaction(null);
-      toast({
-        title: "İşlemler Reddedildi",
-        description: `${ids.length} işlem reddedildi.`,
-        variant: "destructive",
-      });
+      
+      // DIA sonuçlarını işle
+      const diaUpdated = result?.diaUpdated || 0;
+      const results = result?.results || [];
+      const failedDia = results.filter((r: any) => r.success && !r.diaUpdated);
+      
+      if (diaUpdated === ids.length && diaUpdated > 0) {
+        toast({
+          title: "✓ DIA'da Güncellendi",
+          description: `${ids.length} işlem DIA'da reddedildi.`,
+          variant: "destructive",
+        });
+      } else if (diaUpdated > 0) {
+        toast({
+          title: "Kısmi DIA Güncellemesi",
+          description: `${diaUpdated}/${ids.length} işlem DIA'da güncellendi.`,
+          variant: "destructive",
+        });
+      } else if (failedDia.length > 0) {
+        const firstError = failedDia[0]?.diaError || "DIA bağlantı hatası";
+        toast({
+          title: "⚠ Yerel Olarak Kaydedildi",
+          description: `${ids.length} işlem reddedildi ancak DIA güncellenemedi: ${firstError}`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "İşlemler Reddedildi",
+          description: `${ids.length} işlem reddedildi.`,
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       toast({
         title: "Hata",
