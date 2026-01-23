@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Check, X, Loader2, Link as LinkIcon } from 'lucide-react';
 import { Transaction, TRANSACTION_STATUS_LABELS, TransactionType } from '@/types/transaction';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
@@ -21,31 +21,77 @@ interface MobileTransactionCardProps {
 }
 
 const SWIPE_THRESHOLD = 100;
+const HAPTIC_THRESHOLD = 50;
+
+// Haptic feedback helper
+const triggerHaptic = (style: 'light' | 'medium' | 'heavy' = 'medium') => {
+  if ('vibrate' in navigator) {
+    const patterns = {
+      light: 10,
+      medium: 25,
+      heavy: 50,
+    };
+    navigator.vibrate(patterns[style]);
+  }
+};
 
 export function MobileTransactionCard({ transaction, onApprove, onReject }: MobileTransactionCardProps) {
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [hasPassedThreshold, setHasPassedThreshold] = useState(false);
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const startX = useRef(0);
   const cardRef = useRef<HTMLDivElement>(null);
+  const hapticTriggered = useRef(false);
+  const thresholdHapticTriggered = useRef(false);
 
   const isProcessing = transaction._processing;
   const config = TRANSACTION_TYPE_CONFIG[transaction.type];
   const TypeIcon = config?.icon || Receipt;
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (isProcessing || transaction.status !== 'pending') return;
     startX.current = e.touches[0].clientX;
     setIsDragging(true);
-  };
+    hapticTriggered.current = false;
+    thresholdHapticTriggered.current = false;
+    setHasPassedThreshold(false);
+    setSwipeDirection(null);
+  }, [isProcessing, transaction.status]);
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging || isProcessing) return;
     const currentX = e.touches[0].clientX;
     const diff = currentX - startX.current;
     setOffsetX(diff);
-  };
 
-  const handleTouchEnd = () => {
+    // Determine swipe direction
+    if (diff > 10) {
+      setSwipeDirection('right');
+    } else if (diff < -10) {
+      setSwipeDirection('left');
+    }
+
+    // Initial haptic when starting to swipe
+    if (Math.abs(diff) > HAPTIC_THRESHOLD && !hapticTriggered.current) {
+      triggerHaptic('light');
+      hapticTriggered.current = true;
+    }
+
+    // Threshold haptic - stronger feedback when passing action threshold
+    if (Math.abs(diff) > SWIPE_THRESHOLD && !thresholdHapticTriggered.current) {
+      triggerHaptic('heavy');
+      thresholdHapticTriggered.current = true;
+      setHasPassedThreshold(true);
+    } else if (Math.abs(diff) <= SWIPE_THRESHOLD && thresholdHapticTriggered.current) {
+      // Reset if user pulls back
+      thresholdHapticTriggered.current = false;
+      setHasPassedThreshold(false);
+      triggerHaptic('light');
+    }
+  }, [isDragging, isProcessing]);
+
+  const handleTouchEnd = useCallback(() => {
     if (!isDragging || isProcessing) return;
     setIsDragging(false);
 
@@ -53,14 +99,18 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
 
     if (offsetX > SWIPE_THRESHOLD) {
       // Swiped right - Approve
+      triggerHaptic('heavy');
       onApprove(ids);
     } else if (offsetX < -SWIPE_THRESHOLD) {
       // Swiped left - Reject
+      triggerHaptic('heavy');
       onReject(ids);
     }
 
     setOffsetX(0);
-  };
+    setHasPassedThreshold(false);
+    setSwipeDirection(null);
+  }, [isDragging, isProcessing, offsetX, transaction.sourceTransactionIds, transaction.id, onApprove, onReject]);
 
   const getStatusBadge = (status: Transaction['status']) => {
     const variants: Record<Transaction['status'], string> = {
@@ -70,7 +120,7 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
       analyzing: 'bg-primary/10 text-primary border-primary/20',
     };
     return (
-      <Badge variant="outline" className={cn("text-xs", variants[status])}>
+      <Badge variant="outline" className={cn("text-xs transition-all duration-200", variants[status])}>
         {TRANSACTION_STATUS_LABELS[status]}
       </Badge>
     );
@@ -80,30 +130,67 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
   const isApproveSwipe = offsetX > 0;
   const isRejectSwipe = offsetX < 0;
 
+  // Calculate dynamic styles based on swipe progress
+  const backgroundOpacity = Math.min(swipeProgress * 1.5, 1);
+  const iconScale = 0.5 + swipeProgress * 0.5;
+  const cardRotation = (offsetX / 1000) * 5; // Subtle rotation effect
+
   return (
-    <div className="relative overflow-hidden rounded-xl mb-3">
+    <div className="relative overflow-hidden rounded-xl mb-3 animate-fade-in">
       {/* Background indicators */}
       <div className="absolute inset-0 flex">
         {/* Approve background (right swipe) */}
         <div 
           className={cn(
-            "absolute inset-y-0 left-0 bg-success flex items-center justify-start pl-6 transition-opacity",
-            isApproveSwipe && swipeProgress > 0.3 ? "opacity-100" : "opacity-0"
+            "absolute inset-y-0 left-0 bg-success flex items-center justify-start pl-6",
+            "transition-all duration-150"
           )}
-          style={{ width: Math.abs(offsetX) }}
+          style={{ 
+            width: Math.max(Math.abs(offsetX), 0),
+            opacity: isApproveSwipe ? backgroundOpacity : 0,
+          }}
         >
-          <Check className="w-8 h-8 text-white" />
+          <div 
+            className={cn(
+              "transition-all duration-150",
+              hasPassedThreshold && isApproveSwipe && "animate-pulse"
+            )}
+            style={{ transform: `scale(${isApproveSwipe ? iconScale : 0.5})` }}
+          >
+            <Check className="w-8 h-8 text-white" />
+          </div>
+          {hasPassedThreshold && isApproveSwipe && (
+            <span className="ml-2 text-white font-medium text-sm animate-fade-in">
+              Bırak → Onayla
+            </span>
+          )}
         </div>
         
         {/* Reject background (left swipe) */}
         <div 
           className={cn(
-            "absolute inset-y-0 right-0 bg-destructive flex items-center justify-end pr-6 transition-opacity",
-            isRejectSwipe && swipeProgress > 0.3 ? "opacity-100" : "opacity-0"
+            "absolute inset-y-0 right-0 bg-destructive flex items-center justify-end pr-6",
+            "transition-all duration-150"
           )}
-          style={{ width: Math.abs(offsetX) }}
+          style={{ 
+            width: Math.max(Math.abs(offsetX), 0),
+            opacity: isRejectSwipe ? backgroundOpacity : 0,
+          }}
         >
-          <X className="w-8 h-8 text-white" />
+          {hasPassedThreshold && isRejectSwipe && (
+            <span className="mr-2 text-white font-medium text-sm animate-fade-in">
+              Reddet ← Bırak
+            </span>
+          )}
+          <div 
+            className={cn(
+              "transition-all duration-150",
+              hasPassedThreshold && isRejectSwipe && "animate-pulse"
+            )}
+            style={{ transform: `scale(${isRejectSwipe ? iconScale : 0.5})` }}
+          >
+            <X className="w-8 h-8 text-white" />
+          </div>
         </div>
       </div>
 
@@ -111,12 +198,18 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
       <div
         ref={cardRef}
         className={cn(
-          "relative bg-card border rounded-xl p-4 shadow-sm transition-transform",
+          "relative bg-card border rounded-xl p-4 shadow-sm",
+          "transition-all duration-200 ease-out",
           isProcessing && "opacity-50",
           transaction.status === 'analyzing' && "bg-primary/5 border-primary/20",
-          isDragging ? "transition-none" : "transition-transform duration-200"
+          isDragging && "shadow-lg",
+          hasPassedThreshold && isApproveSwipe && "border-success/50",
+          hasPassedThreshold && isRejectSwipe && "border-destructive/50"
         )}
-        style={{ transform: `translateX(${offsetX}px)` }}
+        style={{ 
+          transform: `translateX(${offsetX}px) rotate(${cardRotation}deg)`,
+          transition: isDragging ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -175,14 +268,25 @@ export function MobileTransactionCard({ transaction, onApprove, onReject }: Mobi
 
         {/* Swipe hint for pending items */}
         {transaction.status === 'pending' && !isProcessing && (
-          <div className="mt-3 pt-3 border-t border-dashed flex items-center justify-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <X className="w-3 h-3 text-destructive" />
+          <div className={cn(
+            "mt-3 pt-3 border-t border-dashed flex items-center justify-center gap-6 text-xs",
+            "transition-opacity duration-200",
+            isDragging ? "opacity-30" : "opacity-100"
+          )}>
+            <span className={cn(
+              "flex items-center gap-1.5 transition-all duration-200",
+              swipeDirection === 'left' && "text-destructive scale-105 font-medium"
+            )}>
+              <X className="w-4 h-4 text-destructive" />
               ← Reddet
             </span>
-            <span className="flex items-center gap-1">
+            <div className="w-px h-4 bg-border" />
+            <span className={cn(
+              "flex items-center gap-1.5 transition-all duration-200",
+              swipeDirection === 'right' && "text-success scale-105 font-medium"
+            )}>
               Onayla →
-              <Check className="w-3 h-3 text-success" />
+              <Check className="w-4 h-4 text-success" />
             </span>
           </div>
         )}
