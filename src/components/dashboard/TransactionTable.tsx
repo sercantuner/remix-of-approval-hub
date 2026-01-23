@@ -13,9 +13,11 @@ import {
   Users,
   Building,
   Wallet,
-  CreditCard
+  CreditCard,
+  AlertTriangle,
+  CheckCircle2
 } from 'lucide-react';
-import { Transaction, TRANSACTION_STATUS_LABELS, TransactionType } from '@/types/transaction';
+import { Transaction, TRANSACTION_STATUS_LABELS, TransactionType, QueueStatus } from '@/types/transaction';
 import { cn, formatCurrency, formatDate, formatExchangeRate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -23,6 +25,12 @@ import { Badge } from '@/components/ui/badge';
 import { ApprovalSlider } from '@/components/ui/ApprovalSlider';
 import { TransactionDetailRow } from './TransactionDetailRow';
 import { diaFetchUserList, getCachedUserName } from '@/lib/diaApi';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Transaction type labels and icons
 const TRANSACTION_TYPE_CONFIG: Record<TransactionType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -99,6 +107,111 @@ export function TransactionTable({
         {TRANSACTION_STATUS_LABELS[status]}
       </Badge>
     );
+  };
+
+  // Queue status indicator
+  const getQueueIndicator = (transaction: Transaction) => {
+    if (!transaction._processing && !transaction._queueStatus) return null;
+
+    const status = transaction._queueStatus;
+
+    if (status === 'queued' || status === 'processing') {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{status === 'queued' ? 'Kuyrukta bekliyor' : 'DIA\'ya gönderiliyor...'}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    if (status === 'success') {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center">
+                <CheckCircle2 className="w-4 h-4 text-success" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>DIA\'da güncellendi</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    if (status === 'partial') {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center">
+                <AlertTriangle className="w-4 h-4 text-warning" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Yerel kaydedildi, DIA güncellenemedi</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    if (status === 'failed') {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center">
+                <X className="w-4 h-4 text-destructive" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>İşlem başarısız, geri alındı</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    return null;
+  };
+
+  // Get row background based on queue status
+  const getRowBackground = (transaction: Transaction, isSelected: boolean, isExpanded: boolean) => {
+    const base = 'hover:bg-muted/30 transition-colors cursor-pointer';
+    
+    if (transaction._processing) {
+      if (transaction._queueStatus === 'processing') {
+        return cn(base, 'bg-primary/10 animate-pulse');
+      }
+      if (transaction._queueStatus === 'queued') {
+        return cn(base, 'bg-warning/5');
+      }
+    }
+    
+    if (transaction._queueStatus === 'success') {
+      if (transaction.status === 'approved') {
+        return cn(base, 'bg-success/10');
+      }
+      if (transaction.status === 'rejected') {
+        return cn(base, 'bg-destructive/10');
+      }
+    }
+    
+    if (isSelected) return cn(base, 'bg-primary/10');
+    if (isExpanded) return cn(base, 'bg-primary/20 border-l-4 border-l-primary');
+    
+    return base;
   };
 
   return (
@@ -186,10 +299,10 @@ export function TransactionTable({
                 <Fragment key={transaction.id}>
                     <tr
                     onClick={() => toggleExpand(transaction.id)}
-                    className={cn(
-                      'hover:bg-muted/30 transition-colors cursor-pointer',
-                      selectedIds.includes(transaction.id) && 'bg-primary/10',
-                      isExpanded && 'bg-primary/20 border-l-4 border-l-primary'
+                    className={getRowBackground(
+                      transaction, 
+                      selectedIds.includes(transaction.id), 
+                      isExpanded
                     )}
                   >
                     <td className="p-4" onClick={(e) => e.stopPropagation()}>
@@ -313,18 +426,25 @@ export function TransactionTable({
                       </div>
                     </td>
                     <td className="p-4 text-center">
-                      {getStatusBadge(transaction.status)}
+                      <div className="flex items-center justify-center gap-1">
+                        {getQueueIndicator(transaction)}
+                        {getStatusBadge(transaction.status)}
+                      </div>
                     </td>
                     <td className="p-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-2">
-                        <ApprovalSlider
-                          size="sm"
-                          onApprove={() => onApprove([transaction.id])}
-                          onReject={() => onReject([transaction.id])}
-                          onAnalyze={() => onAnalyze([transaction.id])}
-                          disabled={false}
-                          currentStatus={transaction.status}
-                        />
+                        {transaction._processing ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <ApprovalSlider
+                            size="sm"
+                            onApprove={() => onApprove([transaction.id])}
+                            onReject={() => onReject([transaction.id])}
+                            onAnalyze={() => onAnalyze([transaction.id])}
+                            disabled={!!transaction._processing}
+                            currentStatus={transaction.status}
+                          />
+                        )}
                       </div>
                     </td>
                   </tr>
