@@ -663,7 +663,6 @@ export default function Dashboard() {
               icon={Clock} 
               variant={statusFilter === null ? "primary" : "default"}
               onClick={() => setStatusFilter(null)}
-              currencyTotals={stats.pendingTotals}
             />
             <StatCard 
               title="İnceleniyor" 
@@ -671,7 +670,6 @@ export default function Dashboard() {
               icon={Eye}
               variant={statusFilter === "analyzing" ? "primary" : "default"}
               onClick={() => setStatusFilter(statusFilter === "analyzing" ? null : "analyzing")}
-              currencyTotals={stats.analyzingTotals}
             />
             <StatCard
               title="Onaylanan"
@@ -679,7 +677,6 @@ export default function Dashboard() {
               icon={CheckCircle}
               variant={statusFilter === "approved" ? "primary" : "default"}
               onClick={() => setStatusFilter(statusFilter === "approved" ? null : "approved")}
-              currencyTotals={stats.approvedTotals}
             />
             <StatCard 
               title="Reddedilen" 
@@ -687,13 +684,11 @@ export default function Dashboard() {
               icon={XCircle}
               variant={statusFilter === "rejected" ? "primary" : "default"}
               onClick={() => setStatusFilter(statusFilter === "rejected" ? null : "rejected")}
-              currencyTotals={stats.rejectedTotals}
             />
             <StatCard 
               title="Toplam İşlem" 
               value={stats.total} 
               icon={ClipboardCheck}
-              currencyTotals={stats.allTotals}
             />
           </div>
 
