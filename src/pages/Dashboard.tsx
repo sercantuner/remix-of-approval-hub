@@ -250,10 +250,8 @@ export default function Dashboard() {
   const handleApprove = async (ids: string[]) => {
     try {
       await diaApprove(ids, "approve");
-      // Update local state immediately without removing from list
-      setTransactions(prev => 
-        prev.map(t => ids.includes(t.id) ? { ...t, status: "approved" as const } : t)
-      );
+      // Reload transactions from database to ensure consistency
+      await loadTransactions();
       setSelectedIds([]);
       setSelectedTransaction(null);
       toast({
@@ -279,10 +277,8 @@ export default function Dashboard() {
     const ids = rejectDialogState.transactionIds;
     try {
       await diaApprove(ids, "reject", reason);
-      // Update local state immediately without removing from list
-      setTransactions(prev => 
-        prev.map(t => ids.includes(t.id) ? { ...t, status: "rejected" as const } : t)
-      );
+      // Reload transactions from database to ensure consistency
+      await loadTransactions();
       setSelectedIds([]);
       setSelectedTransaction(null);
       toast({
