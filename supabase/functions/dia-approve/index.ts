@@ -132,7 +132,7 @@ async function updateDiaInvoice(
   };
 
   if (action === "approve") {
-    kart.ustislemack = "MUHASEBELEŞEBİLİR";
+    kart.ustislemturuack = "MUHASEBELEŞEBİLİR";
     kart.ekalan5 = "Onaylandı";
   } else {
     // Reject - only set ekalan5
