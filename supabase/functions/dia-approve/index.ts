@@ -225,8 +225,10 @@ async function updateDiaCurrentAccount(
 
   // Build the kart object based on action
   // For current account, we use _key_scf_carihesap_fisi (numeric parent key) and aciklama3 for status text
+  // IMPORTANT: scf_carihesap_fisi_guncelle requires m_kalemler array (even if empty) to avoid "m_kalemler" key error
   const kart: Record<string, unknown> = {
-    _key: parentKey, // Use the numeric parent key (not fisno)
+    _key: parentKey, // Use the numeric parent key (_key_scf_carihesap_fisi)
+    m_kalemler: [], // Required empty array - API expects this field
   };
 
   if (action === "approve") {
