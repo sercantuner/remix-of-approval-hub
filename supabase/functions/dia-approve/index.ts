@@ -398,8 +398,8 @@ Deno.serve(async (req) => {
       } else if (action === "reject") {
         updateData = { status: "rejected", rejected_at: now, rejected_by: userId, rejection_reason: reason };
       } else {
-        // analyze - back to pending
-        updateData = { status: "pending", approved_at: null, approved_by: null, rejected_at: null, rejected_by: null, rejection_reason: null };
+        // analyze - set to analyzing status
+        updateData = { status: "analyzing", approved_at: null, approved_by: null, rejected_at: null, rejected_by: null, rejection_reason: null };
       }
 
       const { error: updateError } = await supabase
