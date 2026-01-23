@@ -535,6 +535,21 @@ Deno.serve(async (req) => {
         console.log(`[dia-sync] bank: Filtered ${beforeCount - filteredRecords.length} ACLS records, ${filteredRecords.length} remaining`);
       }
       
+      // Filter out cash records with turu = 'ACBO' or 'ACAL' (açılış fişleri)
+      if (txType === "cash") {
+        const beforeCount = filteredRecords.length;
+        filteredRecords = filteredRecords.filter((r: any) => {
+          const turu = r.turu || "";
+          const isOpening = turu === "ACBO" || turu === "ACAL" || 
+                            turu.toUpperCase() === "ACBO" || turu.toUpperCase() === "ACAL";
+          if (isOpening) {
+            console.log(`[dia-sync] Filtering out ${turu} cash record: ${r.fisno}`);
+          }
+          return !isOpening;
+        });
+        console.log(`[dia-sync] cash: Filtered ${beforeCount - filteredRecords.length} ACBO/ACAL records, ${filteredRecords.length} remaining`);
+      }
+      
       syncResults[txType] = { count: filteredRecords.length, success: true };
 
       // Get the appropriate parent receipt map for this transaction type
