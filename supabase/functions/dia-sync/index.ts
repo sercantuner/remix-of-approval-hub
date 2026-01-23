@@ -347,8 +347,10 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // Filter out current_account records with turu = 'AF' (açılış fişleri)
+      // Filter out unwanted record types
       let filteredRecords = records;
+      
+      // Filter out current_account records with turu = 'AF' (açılış fişleri)
       if (txType === "current_account") {
         const beforeCount = records.length;
         filteredRecords = records.filter((r: any) => {
@@ -360,6 +362,20 @@ Deno.serve(async (req) => {
           return !isAF;
         });
         console.log(`[dia-sync] current_account: Filtered ${beforeCount - filteredRecords.length} AF records, ${filteredRecords.length} remaining`);
+      }
+      
+      // Filter out bank records with turu = 'ACLS' (açılış fişleri)
+      if (txType === "bank") {
+        const beforeCount = filteredRecords.length;
+        filteredRecords = filteredRecords.filter((r: any) => {
+          const turu = r.turu || "";
+          const isACLS = turu === "ACLS" || turu.toUpperCase() === "ACLS";
+          if (isACLS) {
+            console.log(`[dia-sync] Filtering out ACLS bank record: ${r.fisno}, turu: ${turu}`);
+          }
+          return !isACLS;
+        });
+        console.log(`[dia-sync] bank: Filtered ${beforeCount - filteredRecords.length} ACLS records, ${filteredRecords.length} remaining`);
       }
       
       syncResults[txType] = { count: filteredRecords.length, success: true };
