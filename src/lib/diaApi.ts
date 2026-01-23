@@ -171,3 +171,35 @@ export async function diaFetchUserList(): Promise<Record<number, string>> {
 export function getCachedUserName(userId: number): string | null {
   return userListCache?.[userId] || null;
 }
+
+// Üst İşlem Türü Types
+export interface UstIslemTuru {
+  _key: number;
+  aciklama: string;
+}
+
+// Fetch üst işlem türleri from DIA
+export async function diaFetchUstIslemTurleri(): Promise<UstIslemTuru[]> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    throw new Error("Not authenticated");
+  }
+
+  const response = await supabase.functions.invoke("dia-api", {
+    body: {
+      action: "list_ust_islem_turu",
+      module: "sis",
+    },
+  });
+
+  if (response.error) {
+    throw new Error(response.error.message);
+  }
+
+  // Map response to UstIslemTuru array
+  const result = response.data?.result || [];
+  return result.map((item: any) => ({
+    _key: item._key,
+    aciklama: item.aciklama || item.ack || `Tür ${item._key}`,
+  }));
+}

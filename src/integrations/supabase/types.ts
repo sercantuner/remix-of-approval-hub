@@ -226,6 +226,8 @@ export type Database = {
           dia_session_expires: string | null
           dia_session_id: string | null
           dia_sunucu_adi: string | null
+          dia_ust_islem_approve_key: number | null
+          dia_ust_islem_reject_key: number | null
           dia_ws_kullanici: string | null
           dia_ws_sifre: string | null
           email: string | null
@@ -242,6 +244,8 @@ export type Database = {
           dia_session_expires?: string | null
           dia_session_id?: string | null
           dia_sunucu_adi?: string | null
+          dia_ust_islem_approve_key?: number | null
+          dia_ust_islem_reject_key?: number | null
           dia_ws_kullanici?: string | null
           dia_ws_sifre?: string | null
           email?: string | null
@@ -258,6 +262,8 @@ export type Database = {
           dia_session_expires?: string | null
           dia_session_id?: string | null
           dia_sunucu_adi?: string | null
+          dia_ust_islem_approve_key?: number | null
+          dia_ust_islem_reject_key?: number | null
           dia_ws_kullanici?: string | null
           dia_ws_sifre?: string | null
           email?: string | null

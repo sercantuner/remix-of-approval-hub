@@ -28,6 +28,19 @@ interface DiaUpdateResponse {
   result?: unknown;
 }
 
+interface ProfileWithUstIslemKeys {
+  dia_sunucu_adi: string;
+  dia_session_id: string;
+  dia_firma_kodu: number;
+  dia_donem_kodu: number;
+  dia_api_key: string;
+  dia_ws_kullanici: string;
+  dia_ws_sifre: string;
+  dia_session_expires: string;
+  dia_ust_islem_approve_key: number | null;
+  dia_ust_islem_reject_key: number | null;
+}
+
 // Get valid DIA session, auto-refresh if expired
 async function getValidDiaSession(supabase: any, userId: string): Promise<DiaSession | null> {
   const { data: profile, error } = await supabase
@@ -122,7 +135,9 @@ async function updateDiaInvoice(
   session: DiaSession,
   key: number,
   action: "approve" | "reject",
-  reason?: string
+  reason?: string,
+  approveKey?: number | null,
+  rejectKey?: number | null
 ): Promise<DiaUpdateResponse> {
   const apiUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/scf/json`;
 
@@ -132,10 +147,18 @@ async function updateDiaInvoice(
   };
 
   if (action === "approve") {
-    kart.ustislemturuack = "MUHASEBELEŞİR";
+    // Use _key_sis_ust_islem_turu if approveKey is set, otherwise fallback to ustislemturuack
+    if (approveKey) {
+      kart._key_sis_ust_islem_turu = approveKey;
+    } else {
+      kart.ustislemturuack = "MUHASEBELEŞİR";
+    }
     kart.ekalan5 = "Onaylandı";
   } else {
-    // Reject - only set ekalan5, do NOT send ustislemturuack
+    // Reject - use _key_sis_ust_islem_turu if rejectKey is set
+    if (rejectKey) {
+      kart._key_sis_ust_islem_turu = rejectKey;
+    }
     kart.ekalan5 = `RED : ${reason || "Belirtilmedi"}`;
   }
 
@@ -248,14 +271,17 @@ async function forceRefreshDiaSession(supabase: any, userId: string, profile: an
 async function updateDiaInvoiceWithRetry(
   supabase: any,
   userId: string,
-  profile: any,
+  profile: ProfileWithUstIslemKeys,
   session: DiaSession,
   key: number,
   action: "approve" | "reject",
   reason?: string
 ): Promise<DiaUpdateResponse> {
+  const approveKey = profile.dia_ust_islem_approve_key;
+  const rejectKey = profile.dia_ust_islem_reject_key;
+  
   // First attempt
-  let response = await updateDiaInvoice(session, key, action, reason);
+  let response = await updateDiaInvoice(session, key, action, reason, approveKey, rejectKey);
   
   // If INVALID_SESSION, refresh and retry once
   if (!response.success && response.code === "401") {
@@ -263,7 +289,7 @@ async function updateDiaInvoiceWithRetry(
     const newSession = await forceRefreshDiaSession(supabase, userId, profile);
     
     if (newSession) {
-      response = await updateDiaInvoice(newSession, key, action, reason);
+      response = await updateDiaInvoice(newSession, key, action, reason, approveKey, rejectKey);
     }
   }
   
@@ -312,10 +338,10 @@ Deno.serve(async (req) => {
     // Get DIA session and profile for API calls
     const diaSession = await getValidDiaSession(supabase, userId);
     
-    // Get profile for retry functionality
+    // Get profile for retry functionality and üst işlem keys
     const { data: profile } = await supabase
       .from("profiles")
-      .select("dia_sunucu_adi, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_firma_kodu, dia_donem_kodu")
+      .select("dia_sunucu_adi, dia_api_key, dia_ws_kullanici, dia_ws_sifre, dia_firma_kodu, dia_donem_kodu, dia_session_id, dia_session_expires, dia_ust_islem_approve_key, dia_ust_islem_reject_key")
       .eq("id", userId)
       .maybeSingle();
 

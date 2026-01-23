@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface DiaApiRequest {
-  action: "list" | "list_detail" | "list_users" | "create" | "update" | "delete" | "approve" | "reject";
+  action: "list" | "list_detail" | "list_users" | "list_ust_islem_turu" | "create" | "update" | "delete" | "approve" | "reject";
   module: string; // e.g., "scf_fatura", "scf_carihesap_fisi", "bcs_bankahesap_fisi"
   filters?: Array<{ field: string; operator: string; value: string }>;
   sorts?: Array<{ field: string; sorttype: "ASC" | "DESC" }>;
@@ -284,6 +284,40 @@ Deno.serve(async (req) => {
       const userResult = await userResponse.json();
       
       return new Response(JSON.stringify(userResult), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Handle list_ust_islem_turu action - fetch üst işlem türleri
+    if (request.action === "list_ust_islem_turu") {
+      const diaUrl = `https://${session.sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
+      const payload = {
+        sis_ust_islem_turu_listele: {
+          session_id: session.session_id,
+          firma_kodu: session.firma_kodu,
+          donem_kodu: session.donem_kodu,
+          filters: [
+            { field: "durum", value: "A", operator: "=" }
+          ],
+          sorts: [],
+          params: {},
+          limit: 100,
+          offset: 0,
+        },
+      };
+
+      console.log(`[dia-api] Fetching üst işlem türleri from ${diaUrl}`);
+
+      const response = await fetch(diaUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      console.log(`[dia-api] Üst işlem türleri response:`, JSON.stringify(result));
+      
+      return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
