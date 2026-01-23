@@ -12,6 +12,8 @@ export type TransactionStatus =
   | 'rejected' 
   | 'analyzing';
 
+export type QueueStatus = 'queued' | 'processing' | 'success' | 'failed' | 'partial';
+
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -35,6 +37,15 @@ export interface Transaction {
 
   /** Number of movements inside the grouped transaction (mainly for bank). */
   movementCount?: number;
+
+  /** UI-only: indicates the transaction is being processed in the queue */
+  _processing?: boolean;
+
+  /** UI-only: status of the queue action for this transaction */
+  _queueStatus?: QueueStatus;
+
+  /** UI-only: original status before optimistic update (for rollback) */
+  _originalStatus?: TransactionStatus;
 }
 
 export interface TransactionGroup {

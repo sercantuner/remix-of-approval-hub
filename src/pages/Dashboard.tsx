@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ClipboardCheck,
@@ -28,9 +28,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useApprovalQueue } from "@/hooks/useApprovalQueue";
 import { supabase } from "@/integrations/supabase/client";
-import { diaSync, diaApprove } from "@/lib/diaApi";
-import type { Transaction, TransactionType, TransactionGroup } from "@/types/transaction";
+import { diaSync } from "@/lib/diaApi";
+import type { Transaction, TransactionType, TransactionGroup, TransactionStatus, QueueStatus } from "@/types/transaction";
 
 const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   invoice: "Faturalar",
@@ -209,6 +210,73 @@ export default function Dashboard() {
   };
 
 
+  // Optimistic UI handlers for the queue
+  const handleOptimisticUpdate = useCallback((
+    transactionId: string, 
+    newStatus: TransactionStatus, 
+    queueStatus: QueueStatus
+  ) => {
+    setTransactions(prev => prev.map(t => 
+      t.id === transactionId 
+        ? { 
+            ...t, 
+            _originalStatus: t._originalStatus || t.status,
+            status: newStatus,
+            _processing: true,
+            _queueStatus: queueStatus,
+          } 
+        : t
+    ));
+  }, []);
+
+  const handleRollback = useCallback((transactionId: string) => {
+    setTransactions(prev => prev.map(t => 
+      t.id === transactionId 
+        ? { 
+            ...t, 
+            status: t._originalStatus || t.status,
+            _processing: false,
+            _queueStatus: 'failed',
+            _originalStatus: undefined,
+          } 
+        : t
+    ));
+  }, []);
+
+  const handleQueueSuccess = useCallback((transactionId: string) => {
+    setTransactions(prev => prev.map(t => 
+      t.id === transactionId 
+        ? { 
+            ...t, 
+            _processing: false,
+            _queueStatus: 'success',
+            _originalStatus: undefined,
+          } 
+        : t
+    ));
+  }, []);
+
+  const handlePartialSuccess = useCallback((transactionId: string) => {
+    setTransactions(prev => prev.map(t => 
+      t.id === transactionId 
+        ? { 
+            ...t, 
+            _processing: false,
+            _queueStatus: 'partial',
+            _originalStatus: undefined,
+          } 
+        : t
+    ));
+  }, []);
+
+  // Initialize approval queue
+  const approvalQueue = useApprovalQueue({
+    onOptimisticUpdate: handleOptimisticUpdate,
+    onRollback: handleRollback,
+    onSuccess: handleQueueSuccess,
+    onPartialSuccess: handlePartialSuccess,
+  });
+
   const pendingTransactions = useMemo(
     () => transactions.filter((t) => t.status === "pending"),
     [transactions]
@@ -269,85 +337,25 @@ export default function Dashboard() {
     return { approved, rejected, pending, total };
   }, [transactions, pendingTransactions]);
 
-  const handleApprove = async (ids: string[]) => {
-    try {
-      const result = await diaApprove(ids, "approve");
-      // Reload transactions from database to ensure consistency
-      await loadTransactions();
-      setSelectedIds([]);
-      setSelectedTransaction(null);
-      
-      // DIA sonuçlarını işle
-      const diaUpdated = result?.diaUpdated || 0;
-      const results = result?.results || [];
-      const failedDia = results.filter((r: any) => r.success && !r.diaUpdated);
-      
-      if (diaUpdated === ids.length && diaUpdated > 0) {
-        toast({
-          title: "✓ DIA'da Güncellendi",
-          description: `${ids.length} işlem DIA'da başarıyla onaylandı.`,
-        });
-      } else if (diaUpdated > 0) {
-        toast({
-          title: "Kısmi DIA Güncellemesi",
-          description: `${diaUpdated}/${ids.length} işlem DIA'da güncellendi. ${failedDia.length} işlem yerel kaydedildi.`,
-        });
-      } else if (failedDia.length > 0) {
-        const firstError = failedDia[0]?.diaError || "DIA bağlantı hatası";
-        toast({
-          title: "⚠ Yerel Olarak Kaydedildi",
-          description: `${ids.length} işlem onaylandı ancak DIA güncellenemedi: ${firstError}`,
-          variant: "default",
-        });
-      } else {
-        toast({
-          title: "İşlemler Onaylandı",
-          description: `${ids.length} işlem başarıyla onaylandı.`,
-        });
-      }
-    } catch (error) {
+  // Optimistic approve - no waiting
+  const handleApprove = (ids: string[]) => {
+    approvalQueue.enqueueBatch(ids, 'approve');
+    setSelectedIds([]);
+    setSelectedTransaction(null);
+    
+    if (ids.length > 1) {
       toast({
-        title: "Hata",
-        description: "İşlemler onaylanırken bir hata oluştu.",
-        variant: "destructive",
+        title: "İşlemler Kuyruğa Eklendi",
+        description: `${ids.length} işlem onay kuyruğuna eklendi.`,
       });
     }
   };
 
-  // Analyze - move back to pending with analyze üst işlem
-  const handleAnalyze = async (ids: string[]) => {
-    try {
-      const result = await diaApprove(ids, "analyze");
-      // Reload transactions from database to ensure consistency
-      await loadTransactions();
-      setSelectedIds([]);
-      setSelectedTransaction(null);
-      
-      const diaUpdated = result?.diaUpdated || 0;
-      
-      if (diaUpdated === ids.length && diaUpdated > 0) {
-        toast({
-          title: "✓ Analize Alındı",
-          description: `${ids.length} işlem analiz aşamasına taşındı.`,
-        });
-      } else if (diaUpdated > 0) {
-        toast({
-          title: "Kısmi DIA Güncellemesi",
-          description: `${diaUpdated}/${ids.length} işlem DIA'da güncellendi.`,
-        });
-      } else {
-        toast({
-          title: "İşlemler Analize Alındı",
-          description: `${ids.length} işlem analiz aşamasına taşındı.`,
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Hata",
-        description: "İşlemler analize alınırken bir hata oluştu.",
-        variant: "destructive",
-      });
-    }
+  // Optimistic analyze - move back to pending
+  const handleAnalyze = (ids: string[]) => {
+    approvalQueue.enqueueBatch(ids, 'analyze');
+    setSelectedIds([]);
+    setSelectedTransaction(null);
   };
 
   // Opens reject reason dialog
@@ -355,51 +363,18 @@ export default function Dashboard() {
     setRejectDialogState({ isOpen: true, transactionIds: ids });
   };
 
-  // Actual reject with reason
-  const handleRejectConfirm = async (reason: string) => {
+  // Optimistic reject with reason
+  const handleRejectConfirm = (reason: string) => {
     const ids = rejectDialogState.transactionIds;
-    try {
-      const result = await diaApprove(ids, "reject", reason);
-      // Reload transactions from database to ensure consistency
-      await loadTransactions();
-      setSelectedIds([]);
-      setSelectedTransaction(null);
-      
-      // DIA sonuçlarını işle
-      const diaUpdated = result?.diaUpdated || 0;
-      const results = result?.results || [];
-      const failedDia = results.filter((r: any) => r.success && !r.diaUpdated);
-      
-      if (diaUpdated === ids.length && diaUpdated > 0) {
-        toast({
-          title: "✓ DIA'da Güncellendi",
-          description: `${ids.length} işlem DIA'da reddedildi.`,
-          variant: "destructive",
-        });
-      } else if (diaUpdated > 0) {
-        toast({
-          title: "Kısmi DIA Güncellemesi",
-          description: `${diaUpdated}/${ids.length} işlem DIA'da güncellendi.`,
-          variant: "destructive",
-        });
-      } else if (failedDia.length > 0) {
-        const firstError = failedDia[0]?.diaError || "DIA bağlantı hatası";
-        toast({
-          title: "⚠ Yerel Olarak Kaydedildi",
-          description: `${ids.length} işlem reddedildi ancak DIA güncellenemedi: ${firstError}`,
-          variant: "default",
-        });
-      } else {
-        toast({
-          title: "İşlemler Reddedildi",
-          description: `${ids.length} işlem reddedildi.`,
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
+    approvalQueue.enqueueBatch(ids, 'reject', reason);
+    setSelectedIds([]);
+    setSelectedTransaction(null);
+    setRejectDialogState({ isOpen: false, transactionIds: [] });
+    
+    if (ids.length > 1) {
       toast({
-        title: "Hata",
-        description: "İşlemler reddedilirken bir hata oluştu.",
+        title: "İşlemler Kuyruğa Eklendi",
+        description: `${ids.length} işlem reddetme kuyruğuna eklendi.`,
         variant: "destructive",
       });
     }
