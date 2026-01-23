@@ -131,7 +131,7 @@ async function getValidSession(supabase: any, userId: string) {
   return profile;
 }
 
-async function fetchDiaData(profile: any, method: string, endpoint: string) {
+async function fetchDiaData(profile: any, method: string, endpoint: string, sessionId: string) {
   // Using correct DIA API v3 URL structure
   const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/${endpoint}`;
 
@@ -142,7 +142,7 @@ async function fetchDiaData(profile: any, method: string, endpoint: string) {
 
   const payload = {
     [method]: {
-      session_id: profile.dia_session_id,
+      session_id: sessionId,
       firma_kodu: profile.dia_firma_kodu,
       donem_kodu: profile.dia_donem_kodu,
       filters,
@@ -165,6 +165,51 @@ async function fetchDiaData(profile: any, method: string, endpoint: string) {
   console.log(`[dia-sync] ${method} raw response:`, JSON.stringify(result).substring(0, 500));
   
   return result;
+}
+
+// Force refresh DIA session
+async function forceRefreshSession(supabase: any, userId: string, profile: any): Promise<string | null> {
+  console.log("[dia-sync] Force refreshing DIA session...");
+  const diaBaseUrl = `https://${profile.dia_sunucu_adi}.ws.dia.com.tr/api/v3/sis/json`;
+  
+  try {
+    const loginResponse = await fetch(diaBaseUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        login: {
+          username: profile.dia_ws_kullanici,
+          password: profile.dia_ws_sifre,
+          disconnect_same_user: true,
+          lang: "tr",
+          params: {
+            apikey: profile.dia_api_key,
+            firma_kodu: profile.dia_firma_kodu,
+            donem_kodu: profile.dia_donem_kodu,
+          },
+        },
+      }),
+    });
+
+    const loginResult = await loginResponse.json();
+    if (loginResult.code === "200" && loginResult.msg) {
+      await supabase
+        .from("profiles")
+        .update({
+          dia_session_id: loginResult.msg,
+          dia_session_expires: new Date(Date.now() + 55 * 60 * 1000).toISOString(),
+        })
+        .eq("id", userId);
+
+      console.log("[dia-sync] Session refreshed successfully:", loginResult.msg);
+      return loginResult.msg;
+    }
+    console.error("[dia-sync] Session refresh failed:", loginResult);
+    return null;
+  } catch (e) {
+    console.error("[dia-sync] Session refresh error:", e);
+    return null;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -209,24 +254,62 @@ Deno.serve(async (req) => {
     const syncResults: Record<string, any> = {};
     const transactionsToUpsert: any[] = [];
 
+    // First attempt with current session
+    let currentSessionId = profile.dia_session_id;
+    
     // Fetch data for each transaction type IN PARALLEL for speed
     console.log("[dia-sync] Starting parallel fetch for all transaction types");
-    const fetchPromises = Object.entries(MODULE_MAPPINGS).map(async ([txType, mapping]) => {
+    let fetchPromises = Object.entries(MODULE_MAPPINGS).map(async ([txType, mapping]) => {
       try {
         console.log(`[dia-sync] Fetching ${txType} using ${mapping.method}`);
-        const result = await fetchDiaData(profile, mapping.method, mapping.endpoint);
+        const result = await fetchDiaData(profile, mapping.method, mapping.endpoint, currentSessionId);
+        
+        // Check for invalid session
+        if (result.code === "401" && result.msg === "INVALID_SESSION") {
+          return { txType, mapping, records: [], success: false, error: "INVALID_SESSION", needsRetry: true };
+        }
+        
         const records = result.result || [];
         console.log(`[dia-sync] ${txType}: Found ${records.length} records`);
-        return { txType, mapping, records, success: true };
+        return { txType, mapping, records, success: true, needsRetry: false };
       } catch (err) {
         console.error(`[dia-sync] Error fetching ${txType}:`, err);
         const errMessage = err instanceof Error ? err.message : "Unknown error";
-        return { txType, mapping, records: [], success: false, error: errMessage };
+        return { txType, mapping, records: [], success: false, error: errMessage, needsRetry: false };
       }
     });
 
-    const fetchResults = await Promise.all(fetchPromises);
+    let fetchResults = await Promise.all(fetchPromises);
     console.log("[dia-sync] All parallel fetches completed");
+    
+    // Check if any request needs session refresh
+    const needsRefresh = fetchResults.some(r => r.needsRetry);
+    if (needsRefresh) {
+      console.log("[dia-sync] Session invalid, refreshing and retrying...");
+      const newSessionId = await forceRefreshSession(supabase, userId, profile);
+      
+      if (newSessionId) {
+        currentSessionId = newSessionId;
+        
+        // Retry all failed fetches
+        fetchPromises = Object.entries(MODULE_MAPPINGS).map(async ([txType, mapping]) => {
+          try {
+            console.log(`[dia-sync] Retrying ${txType} using ${mapping.method}`);
+            const result = await fetchDiaData(profile, mapping.method, mapping.endpoint, currentSessionId);
+            const records = result.result || [];
+            console.log(`[dia-sync] ${txType}: Found ${records.length} records`);
+            return { txType, mapping, records, success: true, needsRetry: false };
+          } catch (err) {
+            console.error(`[dia-sync] Retry error fetching ${txType}:`, err);
+            const errMessage = err instanceof Error ? err.message : "Unknown error";
+            return { txType, mapping, records: [], success: false, error: errMessage, needsRetry: false };
+          }
+        });
+        
+        fetchResults = await Promise.all(fetchPromises);
+        console.log("[dia-sync] Retry fetches completed");
+      }
+    }
 
     // Process results and build transactions
     for (const { txType, mapping, records, success, error } of fetchResults) {
