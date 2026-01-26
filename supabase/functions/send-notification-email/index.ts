@@ -114,6 +114,15 @@ serve(async (req) => {
   }
 
   try {
+    // Check for force parameter to bypass dedup
+    let forceResend = false;
+    try {
+      const body = await req.json();
+      forceResend = body?.force === true;
+    } catch {
+      // No body or invalid JSON, that's fine
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -124,7 +133,7 @@ serve(async (req) => {
     const currentHour = turkeyTime.getHours();
     const todayDateString = turkeyTime.toDateString();
 
-    console.log(`Running notification check for hour: ${currentHour}`);
+    console.log(`Running notification check for hour: ${currentHour}${forceResend ? " (FORCE MODE)" : ""}`);
 
     // Get all users who have notifications enabled
     const { data: notificationSettings, error: settingsError } = await supabase
@@ -162,9 +171,8 @@ serve(async (req) => {
 
     for (const settings of usersToNotify) {
       try {
-        // Check if already sent for this hour today
-        // We store last sent with hour info to allow multiple sends per day
-        if (settings.last_notification_sent) {
+        // Check if already sent for this hour today (skip if force mode)
+        if (!forceResend && settings.last_notification_sent) {
           const lastSent = new Date(settings.last_notification_sent);
           const lastSentTurkey = new Date(lastSent.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
           const lastSentDateString = lastSentTurkey.toDateString();
@@ -176,6 +184,16 @@ serve(async (req) => {
             continue;
           }
         }
+
+        // Get user profile first to get dia_firma_kodu
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, email, dia_firma_kodu")
+          .eq("id", settings.user_id)
+          .single();
+
+        const userName = profile?.full_name || profile?.email || "Kullanıcı";
+        const firmaKodu = profile?.dia_firma_kodu;
 
         // Get mail settings for this user
         const { data: mailSettings, error: mailError } = await supabase
@@ -189,21 +207,17 @@ serve(async (req) => {
           continue;
         }
 
-        // Get user profile
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name, email")
-          .eq("id", settings.user_id)
-          .single();
-
-        const userName = profile?.full_name || profile?.email || "Kullanıcı";
-
-        // Get pending transaction counts by type
-        const { data: transactions, error: txError } = await supabase
+        // Get pending transaction counts by type (filter by dia_firma_kodu if available)
+        let txQuery = supabase
           .from("pending_transactions")
           .select("transaction_type")
-          .eq("user_id", settings.user_id)
           .eq("status", "pending");
+        
+        if (firmaKodu !== null && firmaKodu !== undefined) {
+          txQuery = txQuery.eq("dia_firma_kodu", firmaKodu);
+        }
+        
+        const { data: transactions, error: txError } = await txQuery;
 
         if (txError) {
           console.error(`Failed to fetch transactions for user ${settings.user_id}:`, txError);
