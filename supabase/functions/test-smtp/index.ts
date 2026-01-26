@@ -136,7 +136,20 @@ serve(async (req) => {
     );
   } catch (error: unknown) {
     console.error("Test SMTP error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Mail gönderilemedi";
+    let errorMessage = "Mail gönderilemedi";
+    
+    if (error instanceof Error) {
+      if (error.message.includes("ConnectionReset") || error.message.includes("ECONNRESET")) {
+        errorMessage = "Bağlantı sunucu tarafından reddedildi. SMTP sunucu adresini kontrol edin (imap yerine smtp kullanın).";
+      } else if (error.message.includes("timeout") || error.message.includes("timed out")) {
+        errorMessage = "Bağlantı zaman aşımına uğradı. Sunucu adresi ve port ayarlarını kontrol edin.";
+      } else if (error.message.includes("authentication") || error.message.includes("auth")) {
+        errorMessage = "Kimlik doğrulama hatası. Kullanıcı adı ve şifreyi kontrol edin.";
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
