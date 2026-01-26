@@ -53,34 +53,46 @@ export function NotificationSettingsForm() {
   });
   const [emailInputs, setEmailInputs] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [hasExisting, setHasExisting] = useState(false);
   const { toast } = useToast();
 
   // Load existing settings
   useEffect(() => {
     const loadSettings = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      setIsInitialLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
 
-      const { data } = await supabase
-        .from("notification_settings")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .maybeSingle();
+        const { data, error } = await supabase
+          .from("notification_settings")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
 
-      if (data) {
-        setSettings({
-          id: data.id,
-          is_enabled: data.is_enabled,
-          notification_hours: data.notification_hours || [10],
-          invoice_emails: data.invoice_emails || [],
-          order_emails: data.order_emails || [],
-          current_account_emails: data.current_account_emails || [],
-          bank_emails: data.bank_emails || [],
-          cash_emails: data.cash_emails || [],
-          check_note_emails: data.check_note_emails || [],
-        });
-        setHasExisting(true);
+        if (error) {
+          console.error("Error loading notification settings:", error);
+          return;
+        }
+
+        if (data) {
+          console.log("Loaded notification settings:", data);
+          setSettings({
+            id: data.id,
+            is_enabled: data.is_enabled,
+            notification_hours: data.notification_hours || [10],
+            invoice_emails: data.invoice_emails || [],
+            order_emails: data.order_emails || [],
+            current_account_emails: data.current_account_emails || [],
+            bank_emails: data.bank_emails || [],
+            cash_emails: data.cash_emails || [],
+            check_note_emails: data.check_note_emails || [],
+          });
+          setHasExisting(true);
+        }
+      } finally {
+        setIsInitialLoading(false);
       }
     };
 
@@ -171,6 +183,16 @@ export function NotificationSettingsForm() {
   };
 
   const handleSave = async () => {
+    // Prevent saving while initial data is still loading
+    if (isInitialLoading) {
+      toast({
+        title: "Bekleyin",
+        description: "Ayarlar henüz yükleniyor, lütfen bekleyin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -188,6 +210,8 @@ export function NotificationSettingsForm() {
         cash_emails: settings.cash_emails,
         check_note_emails: settings.check_note_emails,
       };
+
+      console.log("Saving notification settings:", payload);
 
       if (hasExisting && settings.id) {
         const { error } = await supabase
@@ -224,6 +248,26 @@ export function NotificationSettingsForm() {
   };
 
   const totalEmails = CATEGORIES.reduce((sum, cat) => sum + settings[cat.key].length, 0);
+
+  if (isInitialLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="w-5 h-5" />
+            Otomatik Bildirimler
+          </CardTitle>
+          <CardDescription>
+            Belirlenen saatlerde onay bekleyen işlemler için otomatik mail bildirimi alın.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">Ayarlar yükleniyor...</span>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
