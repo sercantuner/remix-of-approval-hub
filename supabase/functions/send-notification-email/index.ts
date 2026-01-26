@@ -242,6 +242,8 @@ serve(async (req) => {
 
         const dashboardUrl = `${supabaseUrl.replace('.supabase.co', '')}/dashboard`;
 
+        let emailsSentForUser = 0;
+        
         // Send emails for each category
         for (const [type, count] of Object.entries(counts)) {
           const emailField = CATEGORY_EMAIL_FIELDS[type];
@@ -266,10 +268,18 @@ serve(async (req) => {
             dashboardUrl
           );
 
+          emailsSentForUser += recipients.length;
           totalSent += recipients.length;
         }
 
-        await client.close();
+        // Only close client if we actually sent emails (connection was established)
+        if (emailsSentForUser > 0) {
+          try {
+            await client.close();
+          } catch (closeError) {
+            console.warn("Error closing SMTP client:", closeError);
+          }
+        }
 
         // Update last notification sent
         await supabase
