@@ -61,11 +61,18 @@ serve(async (req) => {
     }
 
     // Create SMTP client
+    // Port 465 uses implicit SSL (tls: true from start)
+    // Port 587 uses STARTTLS (tls: false, then upgrade)
+    // Port 25 typically no TLS
+    const useTls = smtp_port === 465 ? true : false;
+    
+    console.log(`[test-smtp] Connecting to ${smtp_host}:${smtp_port} with TLS=${useTls}, secure_flag=${smtp_secure}`);
+    
     const client = new SMTPClient({
       connection: {
         hostname: smtp_host,
         port: smtp_port,
-        tls: smtp_secure,
+        tls: useTls,
         auth: {
           username: smtp_user,
           password: finalPassword,

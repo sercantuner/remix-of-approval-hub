@@ -160,6 +160,10 @@ export function MailSettingsForm() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Oturum bulunamadı");
 
+      // Add timeout for SMTP test
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
       const response = await supabase.functions.invoke("test-smtp", {
         body: {
           smtp_host: settings.smtp_host,
@@ -172,6 +176,8 @@ export function MailSettingsForm() {
           test_email: session.user.email,
         },
       });
+      
+      clearTimeout(timeoutId);
 
       if (response.error) {
         throw new Error(response.error.message || "Test başarısız");
