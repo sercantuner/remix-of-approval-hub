@@ -6,24 +6,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login, isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
     // Check if already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        navigate("/dashboard");
-      }
-    });
-  }, [navigate]);
+    if (!isLoading && isAuthenticated) {
+      navigate("/dashboard");
+    }
+  }, [isAuthenticated, isLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,29 +36,35 @@ export default function Login() {
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const success = await login(email, password);
 
-    setIsLoading(false);
+    setIsSubmitting(false);
 
-    if (error) {
-      toast({
-        title: "Giriş Başarısız",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+    if (success) {
       toast({
         title: "Hoş Geldiniz",
         description: "Başarıyla giriş yaptınız.",
       });
       navigate("/dashboard");
+    } else {
+      toast({
+        title: "Giriş Başarısız",
+        description: "E-posta veya şifre hatalı.",
+        variant: "destructive",
+      });
     }
   };
+
+  // Show loading while checking auth state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -76,17 +81,6 @@ export default function Login() {
           <p className="text-lg text-white/80 text-center max-w-md">
             Dia ERP ile entegre çalışan, güvenli ve hızlı işlem onay platformu.
           </p>
-
-          <div className="mt-12 grid grid-cols-2 gap-6 text-white/90">
-            <div className="text-center">
-              <p className="text-3xl font-bold">100+</p>
-              <p className="text-sm text-white/70">Günlük İşlem</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold">%99.9</p>
-              <p className="text-sm text-white/70">Güvenilirlik</p>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -116,7 +110,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10 h-12"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
@@ -132,7 +126,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 pr-10 h-12"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
@@ -151,9 +145,9 @@ export default function Login() {
             <Button
               type="submit"
               className="w-full h-12 text-base gradient-primary hover:opacity-90"
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   Giriş Yapılıyor...
