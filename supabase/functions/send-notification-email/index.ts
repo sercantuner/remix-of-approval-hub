@@ -38,58 +38,15 @@ async function sendEmailToRecipients(
   recipients: string[],
   userName: string,
   category: CategoryCount,
-  dashboardUrl: string
+  _dashboardUrl: string
 ) {
   if (recipients.length === 0) return;
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
-        .content { background: #ffffff; padding: 30px; border: 1px solid #e9ecef; border-top: none; }
-        .footer { background: #f8f9fa; padding: 20px; border-radius: 0 0 8px 8px; text-align: center; border: 1px solid #e9ecef; border-top: none; }
-        .stat-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; }
-        .stat-number { font-size: 48px; font-weight: 700; color: #667eea; }
-        .stat-label { font-size: 14px; color: #6c757d; margin-top: 5px; }
-        .btn { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 15px; }
-        .btn:hover { opacity: 0.9; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0; font-size: 24px;">🔔 Onay Bekleyen İşlemler</h1>
-        </div>
-        <div class="content">
-          <p>Sayın ${userName},</p>
-          <p>Onayınızı bekleyen <strong>${category.label}</strong> işlemleri bulunmaktadır:</p>
-          
-          <div class="stat-box">
-            <div class="stat-number">${category.count}</div>
-            <div class="stat-label">${category.label}</div>
-          </div>
-          
-          <p>Bu işlemleri onaylamak veya reddetmek için aşağıdaki bağlantıya tıklayın:</p>
-          
-          <div style="text-align: center;">
-            <a href="${dashboardUrl}" class="btn">Onay Paneline Git →</a>
-          </div>
-        </div>
-        <div class="footer">
-          <p style="margin: 0; color: #6c757d; font-size: 12px;">
-            Bu mail otomatik olarak gönderilmiştir.<br>
-            Sümen Onay Sistemi
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  // Fixed dashboard URL
+  const dashboardUrl = "https://sumen.diauygulama.com";
+
+  // Build HTML without line breaks to avoid =20 encoding issues
+  const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;color:#333;margin:0;padding:0}.container{max-width:600px;margin:0 auto;padding:20px}.header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:30px;border-radius:8px 8px 0 0;text-align:center}.content{background:#ffffff;padding:30px;border:1px solid #e9ecef;border-top:none}.footer{background:#f8f9fa;padding:20px;border-radius:0 0 8px 8px;text-align:center;border:1px solid #e9ecef;border-top:none}.stat-box{background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:20px;text-align:center;margin:20px 0}.stat-number{font-size:48px;font-weight:700;color:#667eea}.stat-label{font-size:14px;color:#6c757d;margin-top:5px}.btn{display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:600;margin-top:15px}</style></head><body><div class="container"><div class="header"><h1 style="margin:0;font-size:24px;">🔔 Onay Bekleyen İşlemler</h1></div><div class="content"><p>Sayın ' + userName + ',</p><p>Onayınızı bekleyen <strong>' + category.label + '</strong> işlemleri bulunmaktadır:</p><div class="stat-box"><div class="stat-number">' + category.count + '</div><div class="stat-label">' + category.label + '</div></div><p>Bu işlemleri onaylamak veya reddetmek için aşağıdaki bağlantıya tıklayın:</p><div style="text-align:center;"><a href="' + dashboardUrl + '" class="btn" style="color:#ffffff;">Onay Paneline Git →</a></div></div><div class="footer"><p style="margin:0;color:#6c757d;font-size:12px;">Bu mail otomatik olarak gönderilmiştir.<br>Sümen Onay Sistemi</p></div></div></body></html>';
 
   for (const recipient of recipients) {
     try {
