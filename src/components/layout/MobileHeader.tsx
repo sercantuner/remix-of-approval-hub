@@ -74,13 +74,17 @@ export function MobileHeader({
     <header className="sticky top-0 z-50 bg-background border-b px-4 py-3 flex items-center justify-between">
       <Logo size="sm" showText className="text-primary" />
       
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {onSync && (
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={onSync} 
+            onClick={(e) => {
+              e.stopPropagation();
+              onSync();
+            }} 
             disabled={isSyncing}
+            className="h-10 w-10"
           >
             <RefreshCw className={cn("w-5 h-5", isSyncing && "animate-spin")} />
           </Button>
@@ -88,7 +92,7 @@ export function MobileHeader({
         
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="h-10 w-10">
               <Menu className="w-5 h-5" />
             </Button>
           </SheetTrigger>
