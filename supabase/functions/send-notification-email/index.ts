@@ -164,12 +164,15 @@ serve(async (req) => {
           continue;
         }
 
-        // Get pending transaction counts by type (filter by dia_firma_kodu if available)
+        // Get pending transaction counts by type
+        // SECURITY: Always filter by user_id, and additionally by dia_firma_kodu if available
         let txQuery = supabase
           .from("pending_transactions")
           .select("transaction_type")
-          .eq("status", "pending");
+          .eq("status", "pending")
+          .eq("user_id", settings.user_id); // Always filter by user_id for security
         
+        // Additionally filter by dia_firma_kodu if the user has one set
         if (firmaKodu !== null && firmaKodu !== undefined) {
           txQuery = txQuery.eq("dia_firma_kodu", firmaKodu);
         }
