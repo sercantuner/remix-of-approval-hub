@@ -1,4 +1,8 @@
-import { supabase } from "@/integrations/supabase/client";
+import api, { ApiResponse } from './api';
+
+// =====================================================
+// DIA API TYPES
+// =====================================================
 
 interface DiaLoginParams {
   sunucuAdi: string;
@@ -7,6 +11,13 @@ interface DiaLoginParams {
   wsSifre: string;
   firmaKodu: number;
   donemKodu: number;
+}
+
+interface DiaLoginResponse {
+  success: boolean;
+  session_id?: string;
+  expires?: string;
+  error?: string;
 }
 
 interface DiaApiParams {
@@ -21,102 +32,119 @@ interface DiaApiParams {
   transactionType?: string;
 }
 
-export async function diaLogin(params: DiaLoginParams) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    throw new Error("Not authenticated");
-  }
-
-  const response = await supabase.functions.invoke("dia-login", {
-    body: params,
-  });
-
-  if (response.error) {
-    throw new Error(response.error.message);
-  }
-
-  return response.data;
+interface DiaApproveResult {
+  transactionId: string;
+  success: boolean;
+  error?: string;
 }
 
-export async function diaApi(params: DiaApiParams) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    throw new Error("Not authenticated");
-  }
-
-  const response = await supabase.functions.invoke("dia-api", {
-    body: params,
-  });
-
-  if (response.error) {
-    throw new Error(response.error.message);
-  }
-
-  return response.data;
+interface DiaSyncResult {
+  synced: Record<string, number>;
+  errors: string[];
 }
 
-export async function diaSync() {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    throw new Error("Not authenticated");
-  }
-
-  const response = await supabase.functions.invoke("dia-sync", {
-    body: {},
-  });
-
-  if (response.error) {
-    throw new Error(response.error.message);
-  }
-
-  return response.data;
+export interface UstIslemTuru {
+  _key: number;
+  aciklama: string;
 }
 
-export async function diaApprove(transactionIds: string[], action: "approve" | "reject" | "analyze", reason?: string) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    throw new Error("Not authenticated");
+// =====================================================
+// DIA API FUNCTIONS
+// =====================================================
+
+/**
+ * Login to DIA ERP
+ */
+export async function diaLogin(params: DiaLoginParams): Promise<DiaLoginResponse> {
+  try {
+    const response = await api.post<ApiResponse<DiaLoginResponse>>('/dia/login', params);
+    
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    
+    return { success: false, error: response.data.error || 'DIA bağlantısı başarısız' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'DIA bağlantı hatası';
+    return { success: false, error: message };
   }
-
-  const response = await supabase.functions.invoke("dia-approve", {
-    body: { transactionIds, action, reason },
-  });
-
-  if (response.error) {
-    throw new Error(response.error.message);
-  }
-
-  return response.data;
 }
 
-export async function diaFetchDetail(transactionType: string, recordKey: string) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    throw new Error("Not authenticated");
+/**
+ * General DIA API call
+ */
+export async function diaApi(params: DiaApiParams): Promise<any> {
+  const response = await api.post<ApiResponse>('/dia/api', params);
+  
+  if (response.data.success) {
+    return response.data.data;
   }
-
-  const response = await supabase.functions.invoke("dia-api", {
-    body: {
-      action: "list_detail",
-      module: "", // Not used for list_detail
-      transactionType,
-      recordKey,
-    },
-  });
-
-  if (response.error) {
-    throw new Error(response.error.message);
-  }
-
-  return response.data;
+  
+  throw new Error(response.data.error || 'DIA API hatası');
 }
 
-// User list cache - stored in memory
+/**
+ * Sync transactions from DIA
+ */
+export async function diaSync(): Promise<DiaSyncResult> {
+  const response = await api.post<ApiResponse<DiaSyncResult>>('/dia/sync');
+  
+  if (response.data.success && response.data.data) {
+    return response.data.data;
+  }
+  
+  throw new Error(response.data.error || 'Senkronizasyon hatası');
+}
+
+/**
+ * Approve, reject or analyze transactions
+ */
+export async function diaApprove(
+  transactionIds: string[], 
+  action: "approve" | "reject" | "analyze", 
+  reason?: string
+): Promise<{ results: DiaApproveResult[]; message: string }> {
+  const response = await api.post<ApiResponse<{ results: DiaApproveResult[]; message: string }>>('/dia/approve', {
+    transactionIds,
+    action,
+    reason,
+  });
+  
+  if (response.data.success && response.data.data) {
+    return response.data.data;
+  }
+  
+  throw new Error(response.data.error || 'Onay işlemi başarısız');
+}
+
+/**
+ * Fetch transaction detail from DIA
+ */
+export async function diaFetchDetail(transactionType: string, recordKey: string): Promise<any> {
+  const response = await api.post<ApiResponse>('/dia/detail', {
+    transactionType,
+    recordKey,
+  });
+  
+  if (response.data.success) {
+    return response.data.data;
+  }
+  
+  throw new Error(response.data.error || 'Detay getirme hatası');
+}
+
+// =====================================================
+// USER LIST CACHE
+// =====================================================
+
 let userListCache: Record<number, string> | null = null;
 let userListLoading = false;
 let userListPromise: Promise<Record<number, string>> | null = null;
-let userListFetched = false; // Track if fetch was attempted
+let userListFetched = false;
 
+/**
+ * Fetch user list from DIA for name resolution
+ */
 export async function diaFetchUserList(): Promise<Record<number, string>> {
   // Return from cache if available
   if (userListCache && Object.keys(userListCache).length > 0) {
@@ -138,43 +166,17 @@ export async function diaFetchUserList(): Promise<Record<number, string>> {
 
   userListPromise = (async () => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        throw new Error("Not authenticated");
+      console.log('[diaApi] Fetching user list from backend...');
+
+      const response = await api.get<ApiResponse<Record<number, string>>>('/dia/users');
+
+      if (response.data.success && response.data.data) {
+        userListCache = response.data.data;
+        console.log(`[diaApi] Cached ${Object.keys(userListCache).length} users`);
+        return userListCache;
       }
 
-      console.log('[diaApi] Fetching user list from edge function...');
-
-      const response = await supabase.functions.invoke("dia-api", {
-        body: {
-          action: "list_users",
-          module: "sis",
-        },
-      });
-
-      if (response.error) {
-        console.error('[diaApi] User list error:', response.error);
-        throw new Error(response.error.message);
-      }
-
-      console.log('[diaApi] User list response:', JSON.stringify(response.data).substring(0, 500));
-
-      // Build user map from response
-      const users: Record<number, string> = {};
-      const userList = response.data?.result || [];
-      console.log(`[diaApi] User list length: ${userList.length}`);
-      
-      for (const user of userList) {
-        if (user._key && user.gercekadi) {
-          users[user._key] = user.gercekadi;
-        } else if (user._key && user.kullaniciadi) {
-          users[user._key] = user.kullaniciadi;
-        }
-      }
-
-      console.log(`[diaApi] Mapped ${Object.keys(users).length} users`);
-      userListCache = users;
-      return users;
+      return {};
     } finally {
       userListLoading = false;
     }
@@ -183,38 +185,22 @@ export async function diaFetchUserList(): Promise<Record<number, string>> {
   return userListPromise;
 }
 
+/**
+ * Get cached user name
+ */
 export function getCachedUserName(userId: number): string | null {
   return userListCache?.[userId] || null;
 }
 
-// Üst İşlem Türü Types
-export interface UstIslemTuru {
-  _key: number;
-  aciklama: string;
-}
-
-// Fetch üst işlem türleri from DIA
+/**
+ * Fetch üst işlem türleri from DIA
+ */
 export async function diaFetchUstIslemTurleri(): Promise<UstIslemTuru[]> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    throw new Error("Not authenticated");
+  const response = await api.get<ApiResponse<UstIslemTuru[]>>('/dia/ust-islem-turleri');
+  
+  if (response.data.success && response.data.data) {
+    return response.data.data;
   }
-
-  const response = await supabase.functions.invoke("dia-api", {
-    body: {
-      action: "list_ust_islem_turu",
-      module: "sis",
-    },
-  });
-
-  if (response.error) {
-    throw new Error(response.error.message);
-  }
-
-  // Map response to UstIslemTuru array
-  const result = response.data?.result || [];
-  return result.map((item: any) => ({
-    _key: item._key,
-    aciklama: item.aciklama || item.ack || `Tür ${item._key}`,
-  }));
+  
+  throw new Error(response.data.error || 'Üst işlem türleri getirilemedi');
 }

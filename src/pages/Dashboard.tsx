@@ -537,7 +537,7 @@ export default function Dashboard() {
         ...prev,
         steps: prev.steps.map(s => ({ ...s, status: "done" as const })),
         currentStep: SYNC_STEPS.length - 1,
-        totalRecords: result.synced,
+        totalRecords: Object.values(result.synced).reduce((a, b) => a + b, 0),
       }));
       
       await loadTransactions();

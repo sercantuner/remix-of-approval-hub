@@ -98,20 +98,8 @@ export function useApprovalQueue(options: UseApprovalQueueOptions) {
           q.id === nextPending.id ? { ...q, status: 'success' as const } : q
         ));
         
-        // Check if DIA was updated or not
-        if (firstResult.diaUpdated) {
-          optionsRef.current.onSuccess(nextPending.transactionId);
-        } else if (firstResult.diaError) {
-          // Only show partial success if there was an actual error
-          optionsRef.current.onPartialSuccess(nextPending.transactionId);
-          toastRef.current({
-            title: '⚠ Yerel Olarak Kaydedildi',
-            description: `İşlem kaydedildi ancak DIA güncellenemedi: ${firstResult.diaError}`,
-          });
-        } else {
-          // No error, just not a DIA-updateable type - treat as success
-          optionsRef.current.onSuccess(nextPending.transactionId);
-        }
+        // Success
+        optionsRef.current.onSuccess(nextPending.transactionId);
       } else {
         throw new Error(firstResult?.error || 'İşlem başarısız');
       }
