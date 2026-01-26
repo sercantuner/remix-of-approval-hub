@@ -160,24 +160,27 @@ export function MailSettingsForm() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Oturum bulunamadı");
 
-      // Add timeout for SMTP test
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      const response = await supabase.functions.invoke("test-smtp", {
-        body: {
-          smtp_host: settings.smtp_host,
-          smtp_port: settings.smtp_port,
-          smtp_secure: settings.smtp_secure,
-          smtp_user: settings.smtp_user,
-          smtp_password: settings.smtp_password || undefined, // Will use saved password if not provided
-          sender_email: settings.sender_email,
-          sender_name: settings.sender_name,
-          test_email: session.user.email,
-        },
+      // Create a timeout promise that rejects after 30 seconds
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Bağlantı zaman aşımına uğradı (30 saniye). SMTP sunucu adresini ve port ayarlarını kontrol edin.")), 30000);
       });
-      
-      clearTimeout(timeoutId);
+
+      // Race between the actual request and the timeout
+      const response = await Promise.race([
+        supabase.functions.invoke("test-smtp", {
+          body: {
+            smtp_host: settings.smtp_host,
+            smtp_port: settings.smtp_port,
+            smtp_secure: settings.smtp_secure,
+            smtp_user: settings.smtp_user,
+            smtp_password: settings.smtp_password || undefined,
+            sender_email: settings.sender_email,
+            sender_name: settings.sender_name,
+            test_email: session.user.email,
+          },
+        }),
+        timeoutPromise,
+      ]);
 
       if (response.error) {
         throw new Error(response.error.message || "Test başarısız");
